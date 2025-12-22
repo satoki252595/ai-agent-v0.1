@@ -1,0 +1,40 @@
+services:
+  # 1. AIサーバー (Ollama)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama-backend
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11435:11434" # ホスト(PC):コンテナ
+    networks:
+      - ai-network
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    restart: unless-stopped
+
+  # 2. チャットUIアプリ (Streamlit)
+  app:
+    build: ./app
+    container_name: streamlit-ui
+    ports:
+      - "8501:8501"
+    environment:
+      # 重要: Docker内部では 'localhost' ではなく 'サービス名' で通信します
+      - OLLAMA_BASE_URL=http://ollama-backend:11434
+      - MODEL_NAME=nemotron-3-nano
+    networks:
+      - ai-network
+    depends_on:
+      - ollama
+    volumes:
+      - ./app:/app
+
+# 専用ネットワークの定義
+networks:
+  ai-network:
+    driver: bridge
+
+volumes:
+  ollama_data:
