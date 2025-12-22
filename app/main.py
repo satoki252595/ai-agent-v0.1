@@ -35,7 +35,10 @@ def get_summary(url, user_instruction):
     llm = ChatOllama(
         model=MODEL_NAME,
         base_url=OLLAMA_URL,
-        temperature=0.7
+        temperature=0.7,
+        headers={
+            "ngrok-skip-browser-warning": "true"
+        }
     )
 
     # 3. プロンプト作成
