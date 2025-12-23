@@ -4,19 +4,98 @@ import requests
 import tempfile
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
-from io import BytesIO
 from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_community.document_loaders import PyPDFLoader
 
-# --- 設定読み込み ---
+# --- 設定 & 定数 ---
 OLLAMA_URL = st.secrets.get("OLLAMA_BASE_URL", "http://localhost:11435")
 MODEL_NAME = st.secrets.get("MODEL_NAME", "nemotron-3-nano")
 
-st.set_page_config(page_title="高機能AI要約エージェント", page_icon="🕵️", layout="wide")
-st.title("🕵️ Web & PDF 本質的要約くん (Deep Dive)")
-st.caption(f"Powered by **{MODEL_NAME}** | PDF URL Support")
+# --- Notion風スタイル設定 ---
+st.set_page_config(
+    page_title="Essence - AI Summary",
+    page_icon="✨",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# カスタムCSS: Notion風のダークな雰囲気とフォント調整
+st.markdown("""
+<style>
+    .stApp {
+        background-color: #191919;
+        color: #e0e0e0;
+    }
+    h1, h2, h3 {
+        font-family: 'Inter', sans-serif;
+        color: #ffffff !important;
+    }
+    .stButton>button {
+        background-color: #37352f;
+        color: white;
+        border: 1px solid #555;
+        border-radius: 4px;
+    }
+    .stTextInput>div>div>input {
+        background-color: #2f2f2f;
+        color: white;
+    }
+    /* 引用ブロックのスタイル */
+    blockquote {
+        background-color: #2f2f2f;
+        border-left: 3px solid #d44c47;
+        padding: 1rem;
+        border-radius: 4px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# --- プロンプトテンプレート集 ---
+PROMPT_TEMPLATES = {
+    "ビジネス・経営層向け (戦略・影響)": """
+あなたはマッキンゼーやBCG出身の戦略コンサルタントAIです。
+入力された情報を以下の観点で分析し、意思決定に役立つレポートを作成してください。
+
+1. **エグゼクティブサマリー**: 30秒で読める要約
+2. **市場・業界への影響**: この情報がビジネス環境に与えるインパクト
+3. **重要数値・KPI**: 売上、成長率、コスト削減効果などの具体的な数字
+4. **ネクストアクション**: 経営層が検討すべき次のステップ
+
+文体は簡潔、断定的、論理的にしてください。
+""",
+    "エンジニア・技術者向け (実装・アーキテクチャ)": """
+あなたはGoogleのシニアスタッフエンジニアです。
+入力された技術文書や記事から、以下の技術的本質を抽出してください。
+
+1. **アーキテクチャの要点**: 採用されている技術スタック、設計思想
+2. **解決された課題**: どのような技術的負債やボトルネックが解消されたか
+3. **トレードオフ**: メリットの裏にあるデメリットや制約事項
+4. **コード/実装のヒント**: 実装時に注意すべき具体的なポイント
+
+文体は技術用語を正確に使い、箇条書きで構造化してください。
+""",
+    "研究者・アカデミア向け (手法・新規性)": """
+あなたはトップジャーナルの査読者（Reviewer）です。
+入力された論文やレポートを以下の学術的観点で分析してください。
+
+1. **リサーチクエスチョン**: 何を解決しようとしているのか
+2. **提案手法の新規性**: 既存研究との決定的な違い（Novelty）
+3. **検証結果と限界**: 実験結果の妥当性と、残された課題（Limitation）
+4. **分野への貢献**: この知見が学術界に与える示唆
+
+文体はアカデミックかつ客観的にしてください。
+""",
+    "汎用・詳細要約 (Deep Dive)": """
+あなたは優秀な要約編集者です。
+入力された情報を、誰が読んでも理解できるように詳細に構造化してください。
+
+- 専門用語には簡単な補足を入れること
+- 抽象的な概念は具体例に落とし込むこと
+- 重要な事実は漏らさず列挙すること
+"""
+}
 
 # --- ロジック関数群 ---
 
@@ -27,7 +106,6 @@ def get_pdf_text_from_url(url):
         response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status()
         
-        # メモリ上で処理するためにBytesIOを使用
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
             tmp_file.write(response.content)
             tmp_path = tmp_file.name
@@ -41,62 +119,46 @@ def get_pdf_text_from_url(url):
     except Exception as e:
         return f"PDF取得エラー: {e}"
 
-def get_filtered_text_and_links(url):
-    """URLのコンテンツタイプを判定して処理を分岐"""
+def get_content_from_url(url):
+    """URLのコンテンツタイプを判定してテキスト化"""
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
         
-        # まずHEADリクエストでContent-Typeを確認（効率化）
+        # HEADリクエストでContent-Type確認
         try:
             head_resp = requests.head(url, headers=headers, timeout=5, allow_redirects=True)
             content_type = head_resp.headers.get('Content-Type', '').lower()
         except:
-            content_type = '' # 判定できなければGETで試す
+            content_type = ''
 
-        # PDFの場合の処理
+        # PDF判定
         if 'application/pdf' in content_type or url.lower().endswith('.pdf'):
-            st.info("📄 PDFファイルを検出しました。ダウンロードして解析します...")
-            return get_pdf_text_from_url(url), []
+            st.toast("📄 PDFを検出しました", icon="ℹ️")
+            return get_pdf_text_from_url(url), "PDF Document"
 
-        # Webページ(HTML)の場合の処理
+        # HTML判定
         resp = requests.get(url, headers=headers, timeout=10)
         resp.raise_for_status()
         
-        # URLがリダイレクトでPDFになった場合もケア
         if 'application/pdf' in resp.headers.get('Content-Type', '').lower():
-             st.info("📄 PDFファイルを検出しました。ダウンロードして解析します...")
-             # バイナリから一時ファイル作成などの処理が必要だが、簡易的に再取得へ回す
-             return get_pdf_text_from_url(url), []
+             st.toast("📄 PDFを検出しました(Redirect)", icon="ℹ️")
+             return get_pdf_text_from_url(url), "PDF Document"
 
         soup = BeautifulSoup(resp.content, 'html.parser')
-
-        # ノイズ除去
         for tag in soup(['nav', 'header', 'footer', 'script', 'style', 'aside', 'form', 'noscript']):
             tag.decompose()
 
-        # 本文特定
         main_content = soup.find('main') or soup.find('article') or soup.find('div', class_='content') or soup.body
         if not main_content:
-            return "", []
+            return "", "Unknown"
 
         text = main_content.get_text(separator="\n", strip=True)
-
-        # リンク抽出
-        links = []
-        for a_tag in main_content.find_all('a', href=True):
-            link = urljoin(url, a_tag['href'])
-            if link.startswith("http") and link != url:
-                # リンク先がPDFかどうかの厳密なチェックは重くなるため、拡張子で簡易判定
-                if not link.lower().endswith('.pdf'):
-                    links.append(link)
-        
-        return text, list(set(links))
+        return text, soup.title.string if soup.title else "No Title"
 
     except Exception as e:
-        return f"エラー ({url}): {e}", []
+        return f"エラー: {e}", "Error"
 
 def process_uploaded_pdf(uploaded_file):
-    """アップロードされたPDFの処理"""
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
             tmp_file.write(uploaded_file.getvalue())
@@ -105,107 +167,134 @@ def process_uploaded_pdf(uploaded_file):
         loader = PyPDFLoader(tmp_path)
         pages = loader.load()
         text = "\n".join([p.page_content for p in pages])
-        
         os.remove(tmp_path)
         return text
     except Exception as e:
-        return f"PDF読み込みエラー: {e}"
+        return f"エラー: {e}"
 
-# --- UI構築 ---
-
-input_mode = st.sidebar.radio("入力ソースを選択", ["Web URL / PDF URL", "PDF ファイルアップロード"])
-
-target_text = ""
-context_info = ""
-
-if input_mode == "Web URL / PDF URL":
-    url_input = st.text_input("URLを入力 (Web記事またはPDF)", placeholder="https://example.com/report.pdf")
+# --- サイドバー設定 ---
+with st.sidebar:
+    st.title("✨ Essence")
+    st.caption("Context-Aware AI Summarizer")
     
-    # PDFの時は深掘り不要なのでオプションを隠すか、無視する
-    max_links = st.sidebar.slider("Web記事の場合のリンク深掘り数", 0, 5, 2)
+    st.markdown("---")
     
-    if st.button("解析・要約を実行") and url_input:
-        status_area = st.empty()
-        
-        with st.spinner("コンテンツを取得中..."):
-            # メインコンテンツ取得（PDFかHTMLかは内部で判定）
-            main_text, found_links = get_filtered_text_and_links(url_input)
-            
-            combined_content = f"【メインコンテンツ: {url_input}】\n{main_text[:15000]}\n\n" # 文字数制限緩和
-            
-            # HTMLでかつリンク深掘りが有効な場合のみ実行
-            if found_links and max_links > 0:
-                status_area.info(f"記事内に {len(found_links)} 件のリンクを発見。上位 {max_links} 件を調査します...")
-                count = 0
-                for link in found_links[:max_links]:
-                    count += 1
-                    with status_area.text(f"リンク調査中 ({count}/{max_links}): {link}"):
-                        sub_text, _ = get_filtered_text_and_links(link)
-                        # リンク先が長すぎる場合は要約に悪影響なので短めにカット
-                        combined_content += f"--- 関連リンク情報 ({link}) ---\n{sub_text[:1000]}\n\n"
-                context_info = f"メインコンテンツと、関連する {count} 件のリンク先情報を統合しました。"
-            else:
-                context_info = "単一のコンテンツ（PDFまたはWebページ）に基づき作成します。"
-            
-            target_text = combined_content
-            status_area.success("読み込み完了。AI要約を開始します。")
-
-elif input_mode == "PDF ファイルアップロード":
-    uploaded_file = st.file_uploader("PDFファイルをアップロード", type=["pdf"])
+    # 1. 入力ソース
+    input_mode = st.radio("Input Source", ["Web URL / PDF URL", "PDF Upload"], label_visibility="collapsed")
     
-    if uploaded_file and st.button("PDF要約を実行"):
-        with st.spinner("PDFを読み込み中..."):
-            target_text = process_uploaded_pdf(uploaded_file)
-            context_info = f"ファイル名: {uploaded_file.name}"
-
-# --- AI処理実行 ---
-
-if target_text:
-    # 警告：文字数が多すぎる場合の簡易カット（Ollamaのコンテキスト溢れ防止）
-    # Nemotron-3-nano等はコンテキストが短い場合があるため調整
-    if len(target_text) > 20000:
-        st.warning("⚠️ テキスト量が非常に多いため、先頭20,000文字のみを解析対象とします。")
-        target_text = target_text[:20000]
-
-    llm = ChatOllama(
-        model=MODEL_NAME,
-        base_url=OLLAMA_URL,
-        temperature=0.3, # 分析タスクなので少し創造性を下げる
-        headers={"ngrok-skip-browser-warning": "true"},
-        keep_alive="5m"
+    st.markdown("---")
+    
+    # 2. プロンプト選択
+    st.subheader("🛠 Settings")
+    selected_template_name = st.selectbox(
+        "Target Persona",
+        options=list(PROMPT_TEMPLATES.keys()),
+        index=0
+    )
+    
+    # プロンプト編集エリア（デフォルト値をセット）
+    user_system_prompt = st.text_area(
+        "Custom Instructions",
+        value=PROMPT_TEMPLATES[selected_template_name],
+        height=200,
+        help="AIへの指示を自由にカスタマイズできます"
     )
 
-    template = """
-    あなたは高度な金融・ビジネス分析AIです。
-    以下の情報を元に、ユーザーのために「本質的な要約レポート」を作成してください。
-    
-    入力データがIR資料（決算説明資料など）の場合は、特に「業績ハイライト」「将来の見通し」「重要な変化」に焦点を当ててください。
+# --- メインエリア ---
 
-    【コンテキスト情報】
-    {context_info}
+st.title("Essence")
+st.markdown("#### 本質を、抽出する。")
 
-    【解析対象テキスト】
-    {target_text}
+target_text = ""
+source_title = ""
 
-    【出力フォーマット】
-    # タイトル（内容に基づく適切なもの）
-    
-    ## 🎯 エグゼクティブサマリー
-    （全体の要点を3行程度で）
+# 入力UI
+if input_mode == "Web URL / PDF URL":
+    url_input = st.text_input("", placeholder="https://example.com/article_or_report.pdf", label_visibility="collapsed")
+    if url_input and st.button("Analyze", type="primary"):
+        with st.spinner("Fetching content..."):
+            target_text, source_title = get_content_from_url(url_input)
 
-    ## 🔑 重要なポイント
-    - （箇条書き）
-    - （箇条書き）
-    
-    ## 📊 詳細分析
-    （本文に基づいた詳細な解説）
-    """
+elif input_mode == "PDF Upload":
+    uploaded_file = st.file_uploader("", type=["pdf"], label_visibility="collapsed")
+    if uploaded_file and st.button("Analyze", type="primary"):
+        with st.spinner("Reading PDF..."):
+            target_text = process_uploaded_pdf(uploaded_file)
+            source_title = uploaded_file.name
 
-    prompt = ChatPromptTemplate.from_template(template)
-    chain = prompt | llm | StrOutputParser()
+# AI解析実行
+if target_text:
+    # エラー判定
+    if target_text.startswith("エラー") or target_text.startswith("PDF取得エラー"):
+        st.error(target_text)
+    else:
+        # 文字数制限と警告
+        if len(target_text) > 25000:
+            st.warning(f"⚠️ テキストが長大です（{len(target_text)}文字）。精度維持のため先頭25,000文字を分析対象とします。")
+            target_text = target_text[:25000]
 
-    st.subheader("🤖 AI要約レポート")
-    st.write_stream(chain.stream({
-        "target_text": target_text,
-        "context_info": context_info
-    }))
+        # LLM設定
+        llm = ChatOllama(
+            model=MODEL_NAME,
+            base_url=OLLAMA_URL,
+            temperature=0.3, # 分析の精度重視
+            headers={"ngrok-skip-browser-warning": "true"},
+            keep_alive="5m"
+        )
+
+        # 最終的なプロンプトの組み立て
+        # Chain of Thought (思考の連鎖) を促す指示を追加
+        final_prompt_template = f"""
+        {user_system_prompt}
+        
+        ---
+        【以下の手順で処理を実行してください】
+        1. まず、入力テキスト全体を読み、文脈と構造を理解する。
+        2. 重要なキーワード、数値、主張を抽出する。
+        3. 上記の「ターゲットペルソナ」の視点で、情報を再構成する。
+        4. 以下の形式のMarkdownで出力する。
+
+        # (ここに内容に基づいた魅力的なタイトル)
+        
+        ## 💡 Essence (本質的要約)
+        (ここに核心となる要約を記述)
+
+        ## 🏷️ Tags
+        (関連するキーワードをハッシュタグ形式で5つ #AI #Tech 等)
+
+        ---
+        
+        (以下、ペルソナごとの要求項目を出力)
+
+        ---
+        
+        【入力テキスト】
+        {{content}}
+        """
+
+        prompt = ChatPromptTemplate.from_template(final_prompt_template)
+        chain = prompt | llm | StrOutputParser()
+
+        st.markdown("---")
+        st.subheader("Result")
+        
+        # ストリーミング表示
+        result_container = st.empty()
+        full_response = ""
+        
+        try:
+            for chunk in chain.stream({"content": target_text}):
+                full_response += chunk
+                result_container.markdown(full_response)
+            
+            # 完了後のアクションエリア
+            st.markdown("---")
+            col1, col2 = st.columns([1, 4])
+            with col1:
+                st.success("Analysis Complete")
+            with col2:
+                # コピー用のコードブロック（Notion貼り付け用）
+                st.expander("Copy Markdown Source").code(full_response, language="markdown")
+                
+        except Exception as e:
+            st.error(f"AI Processing Error: {e}")
