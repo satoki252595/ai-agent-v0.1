@@ -12,6 +12,10 @@ services:
     dns:
       - 8.8.8.8
       - 8.8.4.4
+    environment:
+      # ▼▼▼ これを追加（外部からのアクセスを全許可） ▼▼▼
+      - OLLAMA_ORIGINS="*"
+      - OLLAMA_HOST=0.0.0.0
     restart: unless-stopped
 
   # 2. チャットUIアプリ (Streamlit)

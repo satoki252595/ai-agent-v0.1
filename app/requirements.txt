@@ -3,4 +3,5 @@ langchain
 langchain-ollama
 langchain-community
 beautifulsoup4
-html2text
+requests
+pypdf
