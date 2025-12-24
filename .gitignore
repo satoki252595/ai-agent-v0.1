@@ -1,0 +1,13 @@
+# Database files
+app/data/
+*.json
+!package.json
+!package-lock.json
+
+# ChromaDB
+app/data/chroma/
+
+# Python cache
+__pycache__/
+*.pyc
+

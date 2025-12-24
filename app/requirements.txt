@@ -26,6 +26,10 @@ tenacity>=8.2.0
 # === PDF Processing ===
 pypdf>=3.17.0
 
+# === Database ===
+tinydb>=4.8.0
+chromadb>=0.4.0
+
 # === Utilities ===
 requests>=2.31.0
 python-dateutil>=2.8.2

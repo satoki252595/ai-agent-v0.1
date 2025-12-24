@@ -4,6 +4,7 @@
 Japan Stock Research AI Agent
 
 シンプルなチャット形式のAIリサーチアシスタント
+ローカルDB（TinyDB + ChromaDB）と連携
 """
 import streamlit as st
 import sys
@@ -22,6 +23,14 @@ from modules.patent import PatentResearcher
 from modules.alpha import AlphaFinder
 from modules.news import NewsAnalyzer
 from modules.ai_agent import StockResearchAgent
+
+# データベース
+from database.stock_db import StockDatabase
+try:
+    from database.vector_db import VectorDatabase
+    VECTOR_DB_AVAILABLE = True
+except ImportError:
+    VECTOR_DB_AVAILABLE = False
 
 # --- ページ設定 ---
 st.set_page_config(
@@ -365,6 +374,26 @@ if "messages" not in st.session_state:
 if "processing" not in st.session_state:
     st.session_state.processing = False
 
+# データベース初期化（キャッシュ）
+@st.cache_resource
+def get_stock_db():
+    """構造化DBを取得"""
+    return StockDatabase()
+
+@st.cache_resource
+def get_vector_db():
+    """ベクトルDBを取得"""
+    if VECTOR_DB_AVAILABLE:
+        try:
+            return VectorDatabase()
+        except Exception as e:
+            st.warning(f"VectorDB初期化エラー: {e}")
+            return None
+    return None
+
+stock_db = get_stock_db()
+vector_db = get_vector_db()
+
 
 # --- ヘルパー関数 ---
 def extract_ticker(text: str) -> str:
@@ -377,30 +406,86 @@ def extract_ticker(text: str) -> str:
 
 
 def analyze_stock(ticker: str) -> dict:
-    """銘柄を分析してデータを取得"""
-    fetcher = StockDataFetcher()
-    info = fetcher.get_stock_info(ticker)
-
-    if "error" in info:
-        return None
-
-    hist = fetcher.get_historical_data(ticker, "1y")
-
+    """
+    銘柄を分析してデータを取得
+    DBにキャッシュがあれば優先的に使用、なければライブデータを取得してDBに保存
+    """
     result = {
-        "info": info,
+        "info": None,
         "technical": None,
-        "fundamental": None
+        "fundamental": None,
+        "from_cache": False
     }
 
-    if not hist.empty:
-        ta = TechnicalAnalyzer(hist)
-        result["technical"] = ta.get_trend_summary()
+    # 1. DBからデータを確認
+    if stock_db.is_data_fresh(ticker, "stocks", max_age_hours=6):
+        cached_info = stock_db.get_stock(ticker)
+        if cached_info:
+            result["info"] = cached_info
+            result["from_cache"] = True
 
-    try:
-        fa = FundamentalAnalyzer(ticker)
-        result["fundamental"] = fa.get_analysis_summary()
-    except:
-        pass
+            # キャッシュされたファンダメンタルズも取得
+            cached_fund = stock_db.get_fundamentals(ticker)
+            if cached_fund:
+                result["fundamental"] = cached_fund
+
+            # キャッシュされたテクニカルも取得
+            cached_tech = stock_db.get_technicals(ticker)
+            if cached_tech:
+                result["technical"] = cached_tech
+
+    # 2. キャッシュがない場合はライブデータを取得
+    if not result["info"]:
+        fetcher = StockDataFetcher()
+        info = fetcher.get_stock_info(ticker)
+
+        if "error" in info:
+            return None
+
+        result["info"] = info
+
+        # DBに保存
+        stock_db.upsert_stock(ticker, info)
+
+        # 価格履歴を取得・保存
+        hist = fetcher.get_historical_data(ticker, "3mo")
+        if not hist.empty:
+            prices = []
+            for date, row in hist.iterrows():
+                prices.append({
+                    "date": date.strftime("%Y-%m-%d"),
+                    "open": float(row["open"]) if "open" in row else 0,
+                    "high": float(row["high"]) if "high" in row else 0,
+                    "low": float(row["low"]) if "low" in row else 0,
+                    "close": float(row["close"]) if "close" in row else 0,
+                    "volume": int(row["volume"]) if "volume" in row else 0
+                })
+            stock_db.save_prices(ticker, prices)
+
+            # テクニカル分析
+            ta = TechnicalAnalyzer(hist)
+            tech_data = ta.get_trend_summary()
+            result["technical"] = tech_data
+            stock_db.save_technicals(ticker, tech_data)
+
+        # ファンダメンタル分析
+        try:
+            fa = FundamentalAnalyzer(ticker)
+            fund_data = fa.get_analysis_summary()
+            result["fundamental"] = fund_data
+            stock_db.save_fundamentals(ticker, fund_data)
+        except:
+            pass
+
+        # ベクトルDBに企業情報を保存
+        if vector_db and info.get("description"):
+            vector_db.add_company_description(
+                ticker=ticker,
+                name=info.get("name", ""),
+                description=info.get("description", ""),
+                sector=info.get("sector", ""),
+                industry=info.get("industry", "")
+            )
 
     return result
 
@@ -415,6 +500,47 @@ def get_macro_context() -> dict:
     }
 
 
+def search_related_info(query: str, ticker: str = None) -> dict:
+    """
+    ベクトルDBから関連情報をセマンティック検索
+    """
+    if not vector_db:
+        return {}
+
+    try:
+        results = {}
+
+        # 類似企業を検索
+        similar_companies = vector_db.search_companies(query, n_results=3)
+        if similar_companies:
+            results["similar_companies"] = similar_companies
+
+        # 関連ニュースを検索
+        if ticker:
+            news = vector_db.search_news(query, ticker=ticker, n_results=5)
+        else:
+            news = vector_db.search_news(query, n_results=5)
+        if news:
+            results["related_news"] = news
+
+        # リサーチノートを検索
+        research = vector_db.search_research(query, ticker=ticker, n_results=3)
+        if research:
+            results["research_notes"] = research
+
+        return results
+    except Exception as e:
+        return {}
+
+
+def get_db_stats() -> dict:
+    """DB統計を取得"""
+    stats = {"stock_db": stock_db.get_stats()}
+    if vector_db:
+        stats["vector_db"] = vector_db.get_stats()
+    return stats
+
+
 # --- メインUI ---
 # ヘッダー
 st.markdown("""
@@ -424,11 +550,15 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ステータス
-st.markdown("""
+# ステータス（DB接続状態を表示）
+db_stats = get_db_stats()
+stocks_in_db = db_stats.get("stock_db", {}).get("stocks_count", 0)
+vector_ready = "vector_db" in db_stats
+
+st.markdown(f"""
 <div class="status-indicator">
     <span class="status-dot"></span>
-    <span>AI Ready</span>
+    <span>AI Ready | DB: {stocks_in_db}銘柄{" | Vector検索可" if vector_ready else ""}</span>
 </div>
 """, unsafe_allow_html=True)
 
