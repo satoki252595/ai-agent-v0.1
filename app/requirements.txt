@@ -30,6 +30,10 @@ pypdf>=3.17.0
 tinydb>=4.8.0
 chromadb>=0.4.0
 
+# === Embeddings (BGE-M3 for Japanese) ===
+sentence-transformers>=2.2.0
+torch>=2.0.0
+
 # === Utilities ===
 requests>=2.31.0
 python-dateutil>=2.8.2
