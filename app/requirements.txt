@@ -5,3 +5,4 @@ langchain-community
 trafilatura
 tenacity
 pypdf
+duckduckgo-search
