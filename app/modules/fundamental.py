@@ -9,9 +9,45 @@ from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 import yfinance as yf
 
-import sys
-sys.path.append('..')
-from utils.helpers import format_ticker, safe_divide, format_number, format_percentage
+
+def format_ticker(code: str) -> str:
+    """銘柄コードを正規化"""
+    code = str(code).strip().upper()
+    if code.endswith('.T') or code.endswith('.JP'):
+        return code
+    if code.isdigit():
+        return f"{code}.T"
+    return code
+
+
+def safe_divide(numerator: float, denominator: float, default: float = 0) -> float:
+    """安全な除算"""
+    if denominator is None or denominator == 0:
+        return default
+    try:
+        return numerator / denominator
+    except (ValueError, TypeError):
+        return default
+
+
+def format_number(value: float, decimals: int = 2) -> str:
+    """数値をフォーマット"""
+    if value is None:
+        return "N/A"
+    try:
+        return f"{value:,.{decimals}f}"
+    except:
+        return "N/A"
+
+
+def format_percentage(value: float, decimals: int = 2) -> str:
+    """パーセンテージ表示"""
+    if value is None:
+        return "N/A"
+    try:
+        return f"{value * 100:.{decimals}f}%"
+    except:
+        return "N/A"
 
 
 @dataclass

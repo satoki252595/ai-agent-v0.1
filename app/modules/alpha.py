@@ -11,7 +11,24 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 import streamlit as st
 
-from utils.helpers import format_ticker, parse_ticker
+
+def format_ticker(code: str) -> str:
+    """銘柄コードを正規化"""
+    code = str(code).strip().upper()
+    if code.endswith('.T') or code.endswith('.JP'):
+        return code
+    if code.isdigit():
+        return f"{code}.T"
+    return code
+
+
+def parse_ticker(ticker: str) -> str:
+    """銘柄コードからサフィックスを除去"""
+    ticker = str(ticker).strip()
+    for suffix in ['.T', '.JP', '.t', '.jp']:
+        if ticker.endswith(suffix):
+            return ticker[:-len(suffix)]
+    return ticker
 
 
 @dataclass

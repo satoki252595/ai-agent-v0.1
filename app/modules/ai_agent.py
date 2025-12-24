@@ -11,11 +11,12 @@ from langchain_core.output_parsers import StrOutputParser
 from duckduckgo_search import DDGS
 import trafilatura
 from tenacity import retry, stop_after_attempt, wait_fixed
+import os
 
-import sys
-sys.path.append('..')
-
-from config import OLLAMA_URL, MODEL_NAME, LLM_TEMPERATURE
+# 設定
+OLLAMA_URL = st.secrets.get("OLLAMA_BASE_URL", os.environ.get("OLLAMA_BASE_URL", "http://localhost:11435"))
+MODEL_NAME = st.secrets.get("MODEL_NAME", os.environ.get("MODEL_NAME", "nemotron-3-nano"))
+LLM_TEMPERATURE = 0.3
 
 
 class StockResearchAgent:
@@ -72,7 +73,6 @@ class StockResearchAgent:
         """
         総合株式分析レポートを生成（ストリーミング）
         """
-        # データの要約を作成
         data_summary = self._create_data_summary(
             ticker, company_name, technical_data, fundamental_data,
             macro_data, news_data, patent_data, alpha_signal
@@ -232,9 +232,7 @@ class StockResearchAgent:
         return "\n".join(summary_parts)
 
     def generate_quick_analysis(self, ticker: str, company_name: str, info: Dict) -> Generator[str, None, None]:
-        """
-        クイック分析を生成
-        """
+        """クイック分析を生成"""
         prompt = ChatPromptTemplate.from_template("""
 あなたは日本株専門アナリストです。
 以下の銘柄情報に基づいて、簡潔な投資分析を提供してください。
@@ -282,13 +280,10 @@ ROE: {roe}
             yield chunk
 
     def research_topic(self, topic: str, status_container=None) -> Dict:
-        """
-        トピックに関する自律リサーチを実行
-        """
+        """トピックに関する自律リサーチを実行"""
         all_notes = ""
         visited_urls = set()
 
-        # 1. 計画フェーズ
         if status_container:
             status_container.write("🤔 調査計画を立案中...")
 
@@ -297,7 +292,6 @@ ROE: {roe}
         if status_container:
             status_container.write(f"📋 検索プラン: {queries}")
 
-        # 2. 実行フェーズ
         if status_container:
             status_container.write("🌍 Web調査を開始...")
 
@@ -360,9 +354,7 @@ ROE: {roe}
         return chain.invoke({"topic": topic, "content": content[:5000]})
 
     def generate_sector_report(self, sector: str, stocks: List[Dict]) -> Generator[str, None, None]:
-        """
-        セクター分析レポートを生成
-        """
+        """セクター分析レポートを生成"""
         stocks_info = "\n".join([
             f"- {s.get('ticker')}: {s.get('name', '')} (PER: {s.get('per', 'N/A')}, ROE: {s.get('roe', 'N/A')})"
             for s in stocks[:10]
@@ -404,9 +396,7 @@ ROE: {roe}
             yield chunk
 
     def compare_stocks(self, stocks_data: List[Dict]) -> Generator[str, None, None]:
-        """
-        複数銘柄の比較分析
-        """
+        """複数銘柄の比較分析"""
         comparison_table = "| 銘柄 | PER | PBR | ROE | 配当利回り |\n|---|---|---|---|---|\n"
         for s in stocks_data:
             comparison_table += f"| {s.get('ticker', '')} | {s.get('per', 'N/A')} | {s.get('pbr', 'N/A')} | {s.get('roe', 'N/A')} | {s.get('dividend_yield', 'N/A')} |\n"

@@ -8,10 +8,26 @@ import yfinance as yf
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List, Union
 import streamlit as st
+import re
 
-import sys
-sys.path.append('..')
-from utils.helpers import format_ticker, parse_ticker
+
+def format_ticker(code: str) -> str:
+    """銘柄コードを正規化（東証形式に変換）"""
+    code = str(code).strip().upper()
+    if code.endswith('.T') or code.endswith('.JP'):
+        return code
+    if code.isdigit():
+        return f"{code}.T"
+    return code
+
+
+def parse_ticker(ticker: str) -> str:
+    """銘柄コードからサフィックスを除去"""
+    ticker = str(ticker).strip()
+    for suffix in ['.T', '.JP', '.t', '.jp']:
+        if ticker.endswith(suffix):
+            return ticker[:-len(suffix)]
+    return ticker
 
 
 class StockDataFetcher:
