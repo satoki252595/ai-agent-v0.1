@@ -1,3 +1,6 @@
+# 日本株リサーチAIエージェント - Docker Compose
+# Japan Stock Research AI Agent - Docker Compose
+
 services:
   # 1. AIサーバー (Ollama)
   ollama:
@@ -6,39 +9,49 @@ services:
     volumes:
       - ollama_data:/root/.ollama
     ports:
-      - "11435:11434" # ホスト(PC):コンテナ
+      - "11435:11434"
     networks:
       - ai-network
     dns:
       - 8.8.8.8
       - 8.8.4.4
     environment:
-      # ▼▼▼ これを追加（外部からのアクセスを全許可） ▼▼▼
       - OLLAMA_ORIGINS="*"
       - OLLAMA_HOST=0.0.0.0
     restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
-  # 2. チャットUIアプリ (Streamlit)
+  # 2. 日本株リサーチAI (Streamlit)
   app:
-    build: ./app
-    container_name: streamlit-ui
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    container_name: japan-stock-research-ai
     ports:
       - "8501:8501"
     environment:
-      # 重要: Docker内部では 'localhost' ではなく 'サービス名' で通信します
       - OLLAMA_BASE_URL=http://ollama-backend:11434
       - MODEL_NAME=nemotron-3-nano
+      - PYTHONPATH=/app
     networks:
       - ai-network
     depends_on:
       - ollama
     volumes:
       - ./app:/app
+    restart: unless-stopped
 
-# 専用ネットワークの定義
+# ネットワーク定義
 networks:
   ai-network:
     driver: bridge
 
+# ボリューム定義
 volumes:
   ollama_data:

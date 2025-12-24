@@ -1,8 +1,31 @@
-streamlit
-langchain
-langchain-ollama
-langchain-community
-trafilatura
-tenacity
-pypdf
-duckduckgo-search
+# 日本株リサーチAIエージェント - 依存パッケージ
+# Japan Stock Research AI Agent - Dependencies
+
+# === Web Framework ===
+streamlit>=1.28.0
+
+# === LangChain & LLM ===
+langchain>=0.1.0
+langchain-ollama>=0.0.1
+langchain-community>=0.0.10
+langchain-core>=0.1.0
+
+# === Data & Analysis ===
+pandas>=2.0.0
+numpy>=1.24.0
+yfinance>=0.2.31
+
+# === Visualization ===
+plotly>=5.18.0
+
+# === Web Scraping & Search ===
+trafilatura>=1.6.0
+duckduckgo-search>=4.0.0
+tenacity>=8.2.0
+
+# === PDF Processing ===
+pypdf>=3.17.0
+
+# === Utilities ===
+requests>=2.31.0
+python-dateutil>=2.8.2
