@@ -3,26 +3,17 @@
 日本株リサーチAIエージェント
 Japan Stock Research AI Agent
 
-プロ投資家向け総合分析プラットフォーム
-- テクニカル分析
-- ファンダメンタルズ分析
-- マクロ経済分析
-- 特許情報収集
-- アルファ発見
-- AIレポート生成
+シンプルなチャット形式のAIリサーチアシスタント
 """
 import streamlit as st
-import pandas as pd
-import plotly.graph_objects as go
-import plotly.express as px
-from datetime import datetime, timedelta
 import sys
 import os
+import re
+from datetime import datetime
 
 # モジュールパスを追加
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from config import OLLAMA_URL, MODEL_NAME, WATCHLIST_DEFAULT, SECTORS
 from modules.stock_data import StockDataFetcher
 from modules.technical import TechnicalAnalyzer
 from modules.fundamental import FundamentalAnalyzer
@@ -31,751 +22,620 @@ from modules.patent import PatentResearcher
 from modules.alpha import AlphaFinder
 from modules.news import NewsAnalyzer
 from modules.ai_agent import StockResearchAgent
-from utils.helpers import format_ticker, parse_ticker, format_number, format_percentage, format_currency
 
 # --- ページ設定 ---
 st.set_page_config(
-    page_title="日本株リサーチAI",
-    page_icon="📈",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    page_title="日本株AI",
+    page_icon="🤖",
+    layout="centered",
+    initial_sidebar_state="collapsed"
 )
 
-# --- カスタムCSS ---
+# --- モバイルファーストCSS ---
 st.markdown("""
 <style>
-    /* ダークテーマ */
+    /* ベースリセット */
+    * {
+        box-sizing: border-box;
+    }
+
+    /* ルート変数 */
+    :root {
+        --primary: #6366f1;
+        --primary-dark: #4f46e5;
+        --bg-dark: #0f0f0f;
+        --bg-card: #1a1a1a;
+        --bg-input: #252525;
+        --text-primary: #ffffff;
+        --text-secondary: #a1a1aa;
+        --border: #2a2a2a;
+        --success: #22c55e;
+        --warning: #f59e0b;
+        --danger: #ef4444;
+    }
+
+    /* アプリ全体 */
     .stApp {
-        background-color: #0e1117 !important;
-        color: #fafafa !important;
+        background: var(--bg-dark) !important;
+        color: var(--text-primary) !important;
     }
 
-    /* サイドバー */
+    /* サイドバー非表示 */
     [data-testid="stSidebar"] {
-        background-color: #1a1d24 !important;
+        display: none;
     }
 
-    /* メトリクスカード */
-    [data-testid="stMetricValue"] {
-        font-size: 1.8rem !important;
-        font-weight: bold !important;
+    /* メインコンテンツ - モバイル最適化 */
+    .main .block-container {
+        padding: 1rem !important;
+        max-width: 100% !important;
     }
 
-    /* ポジティブ/ネガティブ色 */
-    .positive { color: #00d26a !important; }
-    .negative { color: #ff4b4b !important; }
-    .neutral { color: #ffa500 !important; }
-
-    /* カード */
-    .card {
-        background-color: #1e2129;
-        border-radius: 10px;
-        padding: 20px;
-        margin: 10px 0;
-        border: 1px solid #2d3139;
+    @media (min-width: 768px) {
+        .main .block-container {
+            padding: 2rem !important;
+            max-width: 800px !important;
+        }
     }
 
     /* ヘッダー */
-    .main-header {
-        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-        padding: 20px;
-        border-radius: 10px;
-        margin-bottom: 20px;
+    .app-header {
+        text-align: center;
+        padding: 1.5rem 0;
+        margin-bottom: 1rem;
     }
 
-    /* ボタン */
+    .app-header h1 {
+        font-size: 1.75rem;
+        font-weight: 700;
+        margin: 0;
+        background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+
+    .app-header p {
+        color: var(--text-secondary);
+        font-size: 0.875rem;
+        margin: 0.5rem 0 0 0;
+    }
+
+    /* チャットコンテナ */
+    .chat-container {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        min-height: 50vh;
+        padding-bottom: 100px;
+    }
+
+    /* メッセージバブル */
+    .message {
+        padding: 1rem;
+        border-radius: 1rem;
+        max-width: 100%;
+        animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .message-user {
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        color: white;
+        margin-left: 1rem;
+        border-bottom-right-radius: 0.25rem;
+    }
+
+    .message-ai {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-bottom-left-radius: 0.25rem;
+    }
+
+    .message-label {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        margin-bottom: 0.5rem;
+        font-weight: 600;
+    }
+
+    .message-user .message-label {
+        color: rgba(255,255,255,0.8);
+    }
+
+    /* 入力エリア */
+    .input-container {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: var(--bg-dark);
+        border-top: 1px solid var(--border);
+        padding: 1rem;
+        z-index: 1000;
+    }
+
+    .input-wrapper {
+        max-width: 800px;
+        margin: 0 auto;
+        display: flex;
+        gap: 0.75rem;
+    }
+
+    /* テキストエリア */
+    .stTextArea textarea {
+        background: var(--bg-input) !important;
+        border: 1px solid var(--border) !important;
+        border-radius: 1rem !important;
+        color: var(--text-primary) !important;
+        font-size: 1rem !important;
+        padding: 1rem !important;
+        min-height: 56px !important;
+        resize: none !important;
+    }
+
+    .stTextArea textarea:focus {
+        border-color: var(--primary) !important;
+        box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2) !important;
+    }
+
+    .stTextArea textarea::placeholder {
+        color: var(--text-secondary) !important;
+    }
+
+    /* 送信ボタン */
     .stButton > button {
-        background: linear-gradient(90deg, #667eea, #764ba2) !important;
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
         color: white !important;
         border: none !important;
-        font-weight: bold !important;
-        padding: 12px 24px !important;
-        border-radius: 8px !important;
+        border-radius: 1rem !important;
+        padding: 0.875rem 1.5rem !important;
+        font-weight: 600 !important;
+        font-size: 1rem !important;
+        min-height: 56px !important;
+        transition: all 0.2s ease !important;
     }
 
-    /* タブ */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
+    .stButton > button:hover {
+        transform: translateY(-1px) !important;
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4) !important;
     }
 
-    .stTabs [data-baseweb="tab"] {
-        background-color: #1e2129;
-        border-radius: 8px;
-        padding: 10px 20px;
+    .stButton > button:active {
+        transform: translateY(0) !important;
     }
 
-    .stTabs [aria-selected="true"] {
-        background: linear-gradient(90deg, #667eea, #764ba2) !important;
+    /* ステータスインジケーター */
+    .status-indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        background: var(--bg-card);
+        border-radius: 2rem;
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        margin-bottom: 1rem;
     }
 
-    /* テーブル */
-    .dataframe {
-        background-color: #1e2129 !important;
+    .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--success);
+        animation: pulse 2s infinite;
     }
 
-    /* 入力フィールド */
-    .stTextInput > div > div > input {
-        background-color: #1e2129 !important;
-        color: white !important;
-        border: 1px solid #3d4249 !important;
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
     }
 
-    /* セレクトボックス */
-    .stSelectbox > div > div {
-        background-color: #1e2129 !important;
+    /* サンプルクエリ */
+    .sample-queries {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin: 1rem 0;
+    }
+
+    .sample-query {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 2rem;
+        padding: 0.5rem 1rem;
+        font-size: 0.8125rem;
+        color: var(--text-secondary);
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .sample-query:hover {
+        border-color: var(--primary);
+        color: var(--primary);
+    }
+
+    /* レスポンスカード */
+    .response-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 1rem;
+        padding: 1rem;
+        margin: 0.5rem 0;
+    }
+
+    .response-card h4 {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        margin: 0 0 0.5rem 0;
+        font-weight: 600;
+    }
+
+    /* データ表示 */
+    .data-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.75rem;
+        margin: 1rem 0;
+    }
+
+    @media (min-width: 768px) {
+        .data-grid {
+            grid-template-columns: repeat(4, 1fr);
+        }
+    }
+
+    .data-item {
+        background: var(--bg-input);
+        border-radius: 0.75rem;
+        padding: 0.75rem;
+        text-align: center;
+    }
+
+    .data-label {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        margin-bottom: 0.25rem;
+    }
+
+    .data-value {
+        font-size: 1.125rem;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+
+    .data-value.positive { color: var(--success); }
+    .data-value.negative { color: var(--danger); }
+
+    /* スピナー */
+    .stSpinner > div {
+        border-top-color: var(--primary) !important;
+    }
+
+    /* マークダウンスタイル */
+    .message-ai h1, .message-ai h2, .message-ai h3 {
+        color: var(--text-primary);
+        margin-top: 1rem;
+    }
+
+    .message-ai h1 { font-size: 1.25rem; }
+    .message-ai h2 { font-size: 1.125rem; }
+    .message-ai h3 { font-size: 1rem; }
+
+    .message-ai ul, .message-ai ol {
+        padding-left: 1.5rem;
+        color: var(--text-secondary);
+    }
+
+    .message-ai li {
+        margin: 0.25rem 0;
+    }
+
+    .message-ai strong {
+        color: var(--text-primary);
+    }
+
+    /* フッター非表示 */
+    footer { display: none !important; }
+
+    /* Streamlitデフォルトを上書き */
+    .stMarkdown { color: inherit; }
+
+    [data-testid="stHeader"] {
+        background: transparent !important;
+    }
+
+    /* 区切り線 */
+    hr {
+        border: none;
+        border-top: 1px solid var(--border);
+        margin: 1rem 0;
     }
 </style>
 """, unsafe_allow_html=True)
 
 
+# --- セッション状態の初期化 ---
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "processing" not in st.session_state:
+    st.session_state.processing = False
+
+
 # --- ヘルパー関数 ---
-def create_candlestick_chart(df: pd.DataFrame, title: str = "株価チャート") -> go.Figure:
-    """ローソク足チャートを作成"""
-    fig = go.Figure()
-
-    fig.add_trace(go.Candlestick(
-        x=df.index,
-        open=df['open'],
-        high=df['high'],
-        low=df['low'],
-        close=df['close'],
-        name='価格'
-    ))
-
-    # 移動平均線を追加
-    if len(df) >= 25:
-        sma_25 = df['close'].rolling(25).mean()
-        fig.add_trace(go.Scatter(x=df.index, y=sma_25, name='SMA25', line=dict(color='orange', width=1)))
-
-    if len(df) >= 75:
-        sma_75 = df['close'].rolling(75).mean()
-        fig.add_trace(go.Scatter(x=df.index, y=sma_75, name='SMA75', line=dict(color='blue', width=1)))
-
-    fig.update_layout(
-        title=title,
-        yaxis_title='株価',
-        xaxis_title='日付',
-        template='plotly_dark',
-        height=500,
-        xaxis_rangeslider_visible=False
-    )
-
-    return fig
-
-
-def create_technical_gauge(score: float, title: str) -> go.Figure:
-    """テクニカルスコアのゲージチャート"""
-    fig = go.Figure(go.Indicator(
-        mode="gauge+number",
-        value=score,
-        title={'text': title},
-        gauge={
-            'axis': {'range': [-100, 100]},
-            'bar': {'color': "#667eea"},
-            'steps': [
-                {'range': [-100, -50], 'color': "#ff4b4b"},
-                {'range': [-50, 0], 'color': "#ffa500"},
-                {'range': [0, 50], 'color': "#90EE90"},
-                {'range': [50, 100], 'color': "#00d26a"}
-            ],
-            'threshold': {
-                'line': {'color': "white", 'width': 4},
-                'thickness': 0.75,
-                'value': score
-            }
-        }
-    ))
-
-    fig.update_layout(
-        template='plotly_dark',
-        height=250
-    )
-
-    return fig
-
-
-def display_metric_card(label: str, value: str, delta: str = None, delta_color: str = "normal"):
-    """メトリクスカードを表示"""
-    st.metric(label=label, value=value, delta=delta, delta_color=delta_color)
-
-
-# --- サイドバー ---
-with st.sidebar:
-    st.markdown("## 📈 日本株リサーチAI")
-    st.markdown("---")
-
-    # 機能選択
-    page = st.radio(
-        "機能を選択",
-        ["🏠 ダッシュボード", "📊 個別銘柄分析", "🔍 スクリーニング",
-         "🌍 マクロ分析", "📰 ニュース", "🔬 特許分析", "🤖 AIリサーチ"],
-        index=0
-    )
-
-    st.markdown("---")
-
-    # 銘柄入力（共通）
-    ticker_input = st.text_input(
-        "銘柄コード",
-        value="7203",
-        help="4桁の証券コードを入力（例: 7203 = トヨタ）"
-    )
-
-    # ウォッチリスト
-    st.markdown("### 📌 ウォッチリスト")
-    selected_watchlist = st.multiselect(
-        "監視銘柄",
-        options=WATCHLIST_DEFAULT,
-        default=WATCHLIST_DEFAULT[:5]
-    )
-
-    st.markdown("---")
-    st.markdown("### ⚙️ 設定")
-    analysis_period = st.selectbox(
-        "分析期間",
-        ["1mo", "3mo", "6mo", "1y", "2y"],
-        index=3
-    )
-
-
-# --- メインコンテンツ ---
-
-# 初期化
-fetcher = StockDataFetcher()
-macro_analyzer = MacroAnalyzer()
-alpha_finder = AlphaFinder()
-news_analyzer = NewsAnalyzer()
-patent_researcher = PatentResearcher()
-agent = StockResearchAgent()
-
-
-# ==================== ダッシュボード ====================
-if page == "🏠 ダッシュボード":
-    st.markdown('<div class="main-header"><h1>📈 日本株リサーチAI ダッシュボード</h1></div>', unsafe_allow_html=True)
-
-    # マーケットサマリー
-    st.markdown("### 🌍 マーケットサマリー")
-
-    col1, col2, col3, col4 = st.columns(4)
-
-    with col1:
-        indices = macro_analyzer.get_global_indices()
-        if "nikkei225" in indices:
-            nk = indices["nikkei225"]
-            st.metric(
-                "日経平均",
-                f"¥{nk['value']:,.0f}",
-                f"{nk['change_pct']:.2f}%",
-                delta_color="normal" if nk['change_pct'] >= 0 else "inverse"
-            )
-
-    with col2:
-        if "topix" in indices:
-            tp = indices["topix"]
-            st.metric(
-                "TOPIX",
-                f"{tp['value']:,.2f}",
-                f"{tp['change_pct']:.2f}%",
-                delta_color="normal" if tp['change_pct'] >= 0 else "inverse"
-            )
-
-    with col3:
-        forex = macro_analyzer.get_forex_rates()
-        if "usdjpy" in forex:
-            usd = forex["usdjpy"]
-            st.metric(
-                "USD/JPY",
-                f"¥{usd['rate']:.2f}",
-                f"{usd['change_pct']:.2f}%",
-                delta_color="inverse" if usd['change_pct'] >= 0 else "normal"
-            )
-
-    with col4:
-        vix = macro_analyzer.get_volatility_indices()
-        if "vix" in vix:
-            v = vix["vix"]
-            st.metric(
-                "VIX",
-                f"{v['value']:.2f}",
-                v['status']
-            )
-
-    st.markdown("---")
-
-    # 市場レジーム
-    col1, col2 = st.columns([1, 2])
-
-    with col1:
-        st.markdown("### 📊 市場レジーム")
-        regime = macro_analyzer.get_market_regime()
-        st.info(f"**{regime['regime']}**")
-        st.write(f"リスクレベル: **{regime['risk_level']}**")
-
-        rotation = macro_analyzer.get_sector_rotation_signal()
-        st.markdown("#### 推奨セクター")
-        for sector in rotation['recommended_sectors'][:3]:
-            st.write(f"✅ {sector}")
-
-    with col2:
-        st.markdown("### 🚀 アルファシグナル")
-        with st.spinner("スクリーニング中..."):
-            top_alpha = alpha_finder.get_top_alpha_stocks(5)
-            if top_alpha:
-                alpha_df = pd.DataFrame([
-                    {
-                        "銘柄": s.ticker,
-                        "シグナル": s.signal_type,
-                        "スコア": s.strength,
-                        "説明": s.description[:30] + "..."
-                    }
-                    for s in top_alpha
-                ])
-                st.dataframe(alpha_df, use_container_width=True)
-
-    st.markdown("---")
-
-    # ウォッチリスト
-    st.markdown("### 📌 ウォッチリスト")
-    if selected_watchlist:
-        watch_data = []
-        for ticker in selected_watchlist:
-            info = fetcher.get_stock_info(ticker)
-            if "error" not in info:
-                watch_data.append({
-                    "銘柄コード": ticker,
-                    "企業名": info.get("name", "")[:15],
-                    "株価": f"¥{info.get('current_price', 0):,.0f}",
-                    "PER": f"{info.get('pe_ratio', 0):.1f}" if info.get('pe_ratio') else "N/A",
-                    "PBR": f"{info.get('pb_ratio', 0):.2f}" if info.get('pb_ratio') else "N/A",
-                    "配当利回り": f"{info.get('dividend_yield', 0)*100:.2f}%" if info.get('dividend_yield') else "N/A"
-                })
-
-        if watch_data:
-            st.dataframe(pd.DataFrame(watch_data), use_container_width=True)
-
-
-# ==================== 個別銘柄分析 ====================
-elif page == "📊 個別銘柄分析":
-    st.markdown(f"## 📊 個別銘柄分析: {ticker_input}")
-
-    if st.button("🔍 分析開始", type="primary"):
-        with st.spinner("データ取得中..."):
-            # 株価情報取得
-            info = fetcher.get_stock_info(ticker_input)
-            hist = fetcher.get_historical_data(ticker_input, analysis_period)
-
-            if "error" in info or hist.empty:
-                st.error("データの取得に失敗しました。銘柄コードを確認してください。")
-            else:
-                company_name = info.get("name", ticker_input)
-
-                # ヘッダー情報
-                st.markdown(f"### {company_name}（{ticker_input}）")
-
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    current = info.get('current_price', 0)
-                    prev = info.get('previous_close', 0)
-                    change_pct = ((current - prev) / prev * 100) if prev else 0
-                    st.metric("現在株価", f"¥{current:,.0f}", f"{change_pct:.2f}%")
-                with col2:
-                    st.metric("時価総額", format_currency(info.get('market_cap', 0)))
-                with col3:
-                    st.metric("PER", f"{info.get('pe_ratio', 0):.1f}" if info.get('pe_ratio') else "N/A")
-                with col4:
-                    st.metric("配当利回り", f"{info.get('dividend_yield', 0)*100:.2f}%" if info.get('dividend_yield') else "N/A")
-
-                # タブで分析結果を表示
-                tab1, tab2, tab3, tab4 = st.tabs(["📈 チャート", "📊 テクニカル", "💰 ファンダメンタル", "🤖 AI分析"])
-
-                with tab1:
-                    # ローソク足チャート
-                    fig = create_candlestick_chart(hist, f"{company_name} 株価チャート")
-                    st.plotly_chart(fig, use_container_width=True)
-
-                    # 出来高チャート
-                    fig_vol = px.bar(hist, x=hist.index, y='volume', title='出来高')
-                    fig_vol.update_layout(template='plotly_dark', height=200)
-                    st.plotly_chart(fig_vol, use_container_width=True)
-
-                with tab2:
-                    # テクニカル分析
-                    ta = TechnicalAnalyzer(hist)
-                    trend = ta.get_trend_summary()
-
-                    col1, col2 = st.columns([1, 2])
-                    with col1:
-                        fig_gauge = create_technical_gauge(trend['score'], "テクニカルスコア")
-                        st.plotly_chart(fig_gauge, use_container_width=True)
-                        st.markdown(f"**総合シグナル: {trend['overall_signal']}**")
-
-                    with col2:
-                        st.markdown("#### シグナル一覧")
-                        for signal in trend['signals']:
-                            color = "🟢" if signal.signal == "買い" else "🔴" if signal.signal == "売り" else "🟡"
-                            st.write(f"{color} **{signal.indicator}**: {signal.signal} ({signal.description})")
-
-                    # RSIチャート
-                    rsi = ta.rsi()
-                    fig_rsi = go.Figure()
-                    fig_rsi.add_trace(go.Scatter(x=rsi.index, y=rsi, name='RSI', line=dict(color='purple')))
-                    fig_rsi.add_hline(y=70, line_dash="dash", line_color="red")
-                    fig_rsi.add_hline(y=30, line_dash="dash", line_color="green")
-                    fig_rsi.update_layout(title='RSI (14)', template='plotly_dark', height=250)
-                    st.plotly_chart(fig_rsi, use_container_width=True)
-
-                with tab3:
-                    # ファンダメンタルズ分析
-                    fa = FundamentalAnalyzer(ticker_input)
-                    summary = fa.get_analysis_summary()
-
-                    col1, col2 = st.columns(2)
-
-                    with col1:
-                        st.markdown("#### バリュエーション")
-                        val = summary.get('valuation', {})
-                        st.write(f"- PER: **{val.get('per', 'N/A')}**")
-                        st.write(f"- PBR: **{val.get('pbr', 'N/A')}**")
-                        st.write(f"- PSR: **{val.get('psr', 'N/A')}**")
-                        st.write(f"- EV/EBITDA: **{val.get('ev_ebitda', 'N/A')}**")
-
-                        st.markdown("#### 収益性")
-                        prof = summary.get('profitability', {})
-                        st.write(f"- ROE: **{format_percentage(prof.get('roe'))}**")
-                        st.write(f"- ROA: **{format_percentage(prof.get('roa'))}**")
-                        st.write(f"- 営業利益率: **{format_percentage(prof.get('operating_margin'))}**")
-
-                    with col2:
-                        st.markdown("#### ファンダメンタルスコア")
-                        score = summary.get('fundamental_score', 0)
-                        grade = summary.get('fundamental_grade', 'N/A')
-
-                        fig_fund = go.Figure(go.Indicator(
-                            mode="gauge+number+delta",
-                            value=score,
-                            title={'text': f"総合スコア (グレード: {grade})"},
-                            gauge={
-                                'axis': {'range': [0, 100]},
-                                'bar': {'color': "#667eea"},
-                                'steps': [
-                                    {'range': [0, 40], 'color': "#ff4b4b"},
-                                    {'range': [40, 60], 'color': "#ffa500"},
-                                    {'range': [60, 80], 'color': "#90EE90"},
-                                    {'range': [80, 100], 'color': "#00d26a"}
-                                ]
-                            }
-                        ))
-                        fig_fund.update_layout(template='plotly_dark', height=250)
-                        st.plotly_chart(fig_fund, use_container_width=True)
-
-                        st.markdown("#### 財務健全性")
-                        health = summary.get('financial_health', {})
-                        st.write(f"- 自己資本比率: **{format_percentage(health.get('current_ratio'))}**")
-                        st.write(f"- D/E比率: **{health.get('debt_to_equity', 'N/A')}**")
-
-                with tab4:
-                    # AI分析レポート生成
-                    st.markdown("#### 🤖 AIによる総合分析レポート")
-
-                    if st.button("📝 レポート生成", key="generate_report"):
-                        with st.spinner("AI分析中..."):
-                            # データ収集
-                            ta = TechnicalAnalyzer(hist)
-                            technical_data = ta.get_trend_summary()
-
-                            fa = FundamentalAnalyzer(ticker_input)
-                            fundamental_data = fa.get_analysis_summary()
-
-                            macro_data = macro_analyzer.get_macro_summary()
-
-                            news_data = news_analyzer.analyze_company_sentiment(ticker_input, company_name)
-
-                            patent_data = patent_researcher.analyze_patent_portfolio(company_name)
-
-                            alpha_signal = alpha_finder.calculate_alpha_score(ticker_input)
-
-                            # レポート生成（ストリーミング）
-                            report_container = st.empty()
-                            full_report = ""
-
-                            for chunk in agent.generate_stock_report(
-                                ticker_input,
-                                company_name,
-                                technical_data,
-                                fundamental_data,
-                                macro_data,
-                                news_data,
-                                patent_data,
-                                {"signal_type": alpha_signal.signal_type, "strength": alpha_signal.strength, "description": alpha_signal.description}
-                            ):
-                                full_report += chunk
-                                report_container.markdown(full_report)
-
-
-# ==================== スクリーニング ====================
-elif page == "🔍 スクリーニング":
-    st.markdown("## 🔍 スクリーニング")
-
-    screening_type = st.selectbox(
-        "スクリーニングタイプ",
-        ["バリュー株", "グロース株", "クオリティ株", "モメンタム株", "売られすぎ銘柄", "ブレイクアウト候補"]
-    )
-
-    if st.button("🔍 スクリーニング実行", type="primary"):
-        with st.spinner("スクリーニング中..."):
-            if screening_type == "バリュー株":
-                df = alpha_finder.screen_value_stocks()
-                if not df.empty:
-                    st.markdown("### バリュー株（割安銘柄）")
-                    st.dataframe(df[['ticker', 'name', 'per', 'pbr', 'dividend_yield', 'value_score']].head(20), use_container_width=True)
-
-            elif screening_type == "グロース株":
-                df = alpha_finder.screen_growth_stocks()
-                if not df.empty:
-                    st.markdown("### グロース株（成長銘柄）")
-                    st.dataframe(df[['ticker', 'name', 'revenue_growth', 'earnings_growth', 'roe', 'growth_score']].head(20), use_container_width=True)
-
-            elif screening_type == "クオリティ株":
-                df = alpha_finder.screen_quality_stocks()
-                if not df.empty:
-                    st.markdown("### クオリティ株（優良銘柄）")
-                    st.dataframe(df[['ticker', 'name', 'roe', 'operating_margin', 'debt_to_equity', 'quality_score']].head(20), use_container_width=True)
-
-            elif screening_type == "モメンタム株":
-                df = alpha_finder.screen_momentum_stocks()
-                if not df.empty:
-                    st.markdown("### モメンタム株（上昇トレンド）")
-                    st.dataframe(df[['ticker', 'return_1m', 'return_3m', 'rsi', 'momentum_score']].head(20), use_container_width=True)
-
-            elif screening_type == "売られすぎ銘柄":
-                df = alpha_finder.find_oversold_stocks()
-                if not df.empty:
-                    st.markdown("### 売られすぎ銘柄（逆張り候補）")
-                    st.dataframe(df[['ticker', 'name', 'rsi', 'drawdown_from_52w_high', 'oversold_score']].head(20), use_container_width=True)
-
-            elif screening_type == "ブレイクアウト候補":
-                df = alpha_finder.find_breakout_candidates()
-                if not df.empty:
-                    st.markdown("### ブレイクアウト候補")
-                    st.dataframe(df[['ticker', 'price', 'resistance', 'breakout_pct', 'volume_ratio', 'signal']].head(20), use_container_width=True)
-
-
-# ==================== マクロ分析 ====================
-elif page == "🌍 マクロ分析":
-    st.markdown("## 🌍 マクロ経済分析")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.markdown("### 📈 グローバル株価指数")
-        indices = macro_analyzer.get_global_indices()
-        indices_data = []
-        for name, data in indices.items():
-            indices_data.append({
-                "指数": name,
-                "価格": f"{data['value']:,.2f}",
-                "変動": f"{data['change_pct']:.2f}%"
-            })
-        st.dataframe(pd.DataFrame(indices_data), use_container_width=True)
-
-    with col2:
-        st.markdown("### 💱 為替レート")
-        forex = macro_analyzer.get_forex_rates()
-        forex_data = []
-        for pair, data in forex.items():
-            forex_data.append({
-                "通貨ペア": pair.upper(),
-                "レート": f"{data['rate']:.2f}",
-                "変動": f"{data['change_pct']:.2f}%"
-            })
-        st.dataframe(pd.DataFrame(forex_data), use_container_width=True)
-
-    st.markdown("---")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.markdown("### 🛢️ コモディティ")
-        commodities = macro_analyzer.get_commodity_prices()
-        comm_data = []
-        for name, data in commodities.items():
-            comm_data.append({
-                "商品": name,
-                "価格": f"${data['price']:.2f}",
-                "変動": f"{data['change_pct']:.2f}%"
-            })
-        st.dataframe(pd.DataFrame(comm_data), use_container_width=True)
-
-    with col2:
-        st.markdown("### 📊 市場レジーム")
-        regime = macro_analyzer.get_market_regime()
-        st.info(f"**現在のレジーム:** {regime['regime']}")
-        st.write(f"**リスクレベル:** {regime['risk_level']}")
-        st.write(f"**VIX:** {regime['vix']['current']:.1f} ({regime['vix']['status']})")
-        st.write(f"**日経トレンド:** {regime['nikkei']['trend']} ({regime['nikkei']['return_3m']:.1f}%)")
-        st.write(f"**為替トレンド:** {regime['forex']['trend']}")
-
-    st.markdown("---")
-
-    st.markdown("### 🔄 セクターローテーション")
-    rotation = macro_analyzer.get_sector_rotation_signal()
-
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("#### ✅ 推奨セクター")
-        for sector in rotation['recommended_sectors']:
-            st.write(f"• {sector}")
-    with col2:
-        st.markdown("#### ⚠️ 回避セクター")
-        for sector in rotation['sectors_to_avoid']:
-            st.write(f"• {sector}")
-
-    st.info(f"**理由:** {rotation['reason']}")
-
-
-# ==================== ニュース ====================
-elif page == "📰 ニュース":
-    st.markdown("## 📰 ニュース・センチメント分析")
-
-    company_name = st.text_input("企業名を入力", value="トヨタ自動車")
-
-    if st.button("📰 ニュース取得", type="primary"):
-        with st.spinner("ニュース収集中..."):
-            analysis = news_analyzer.analyze_company_sentiment(ticker_input, company_name)
-
-            col1, col2 = st.columns([1, 2])
-
-            with col1:
-                st.markdown("### センチメント")
-                score = analysis['sentiment_score']
-                sentiment = analysis['overall_sentiment']
-
-                color = "#00d26a" if sentiment == "ポジティブ" else "#ff4b4b" if sentiment == "ネガティブ" else "#ffa500"
-                st.markdown(f"<h1 style='color:{color};'>{sentiment}</h1>", unsafe_allow_html=True)
-                st.metric("スコア", f"{score:.1f}/100")
-                st.write(f"ポジティブ: {analysis['positive_count']}件")
-                st.write(f"ネガティブ: {analysis['negative_count']}件")
-                st.write(f"中立: {analysis['neutral_count']}件")
-
-            with col2:
-                st.markdown("### 最新ニュース")
-                for news in analysis['all_news'][:10]:
-                    sentiment_icon = "🟢" if news['sentiment'] == "ポジティブ" else "🔴" if news['sentiment'] == "ネガティブ" else "🟡"
-                    st.markdown(f"{sentiment_icon} **{news['title']}**")
-                    st.caption(f"{news['source']} | [リンク]({news['url']})")
-                    st.markdown("---")
-
-
-# ==================== 特許分析 ====================
-elif page == "🔬 特許分析":
-    st.markdown("## 🔬 特許・技術力分析")
-
-    company_name = st.text_input("企業名を入力", value="ソニー")
-
-    if st.button("🔬 特許分析開始", type="primary"):
-        with st.spinner("特許情報収集中..."):
-            analysis = patent_researcher.analyze_tech_innovation(ticker_input, company_name)
-
-            col1, col2 = st.columns([1, 2])
-
-            with col1:
-                st.markdown("### 技術力評価")
-                st.metric("技術スコア", f"{analysis['innovation_score']}/100")
-                st.metric("グレード", analysis['innovation_grade'])
-                st.info(analysis['assessment'])
-
-            with col2:
-                st.markdown("### 技術分野")
-                tech_areas = analysis['portfolio'].get('technology_areas', {})
-                if tech_areas:
-                    fig = px.bar(
-                        x=list(tech_areas.values()),
-                        y=list(tech_areas.keys()),
-                        orientation='h',
-                        title='技術分野分布'
-                    )
-                    fig.update_layout(template='plotly_dark', height=300)
-                    st.plotly_chart(fig, use_container_width=True)
-
-            st.markdown("---")
-
-            st.markdown("### 📄 発見された特許")
-            for patent in analysis['portfolio'].get('patents', [])[:10]:
-                st.markdown(f"**{patent.get('title', '')}**")
-                st.caption(f"[詳細]({patent.get('url', '')})")
-                st.write(patent.get('snippet', '')[:200])
-                st.markdown("---")
-
-
-# ==================== AIリサーチ ====================
-elif page == "🤖 AIリサーチ":
-    st.markdown("## 🤖 自律型AIリサーチエージェント")
-
+def extract_ticker(text: str) -> str:
+    """テキストから銘柄コードを抽出"""
+    # 4桁の数字パターン
+    match = re.search(r'\b(\d{4})\b', text)
+    if match:
+        return match.group(1)
+    return None
+
+
+def analyze_stock(ticker: str) -> dict:
+    """銘柄を分析してデータを取得"""
+    fetcher = StockDataFetcher()
+    info = fetcher.get_stock_info(ticker)
+
+    if "error" in info:
+        return None
+
+    hist = fetcher.get_historical_data(ticker, "1y")
+
+    result = {
+        "info": info,
+        "technical": None,
+        "fundamental": None
+    }
+
+    if not hist.empty:
+        ta = TechnicalAnalyzer(hist)
+        result["technical"] = ta.get_trend_summary()
+
+    try:
+        fa = FundamentalAnalyzer(ticker)
+        result["fundamental"] = fa.get_analysis_summary()
+    except:
+        pass
+
+    return result
+
+
+def get_macro_context() -> dict:
+    """マクロ経済コンテキストを取得"""
+    macro = MacroAnalyzer()
+    return {
+        "indices": macro.get_global_indices(),
+        "forex": macro.get_forex_rates(),
+        "regime": macro.get_market_regime()
+    }
+
+
+# --- メインUI ---
+# ヘッダー
+st.markdown("""
+<div class="app-header">
+    <h1>🤖 日本株リサーチAI</h1>
+    <p>AIがあなたの投資リサーチをサポートします</p>
+</div>
+""", unsafe_allow_html=True)
+
+# ステータス
+st.markdown("""
+<div class="status-indicator">
+    <span class="status-dot"></span>
+    <span>AI Ready</span>
+</div>
+""", unsafe_allow_html=True)
+
+# チャット履歴がない場合のウェルカムメッセージ
+if not st.session_state.messages:
     st.markdown("""
-    <div style="background-color: #1e2129; padding: 15px; border-radius: 10px; border-left: 5px solid #667eea; margin-bottom: 20px;">
-        <strong>💡 使い方:</strong> 調査したいテーマを自由に入力してください。<br>
-        例：「半導体セクターの今後の見通しと注目銘柄」「日銀の金融政策が自動車株に与える影響」
-    </div>
-    """, unsafe_allow_html=True)
+<div class="message message-ai">
+    <div class="message-label">🤖 AI</div>
+    <p>こんにちは！日本株リサーチAIです。</p>
+    <p>銘柄分析、市場動向、投資戦略など、何でもお聞きください。</p>
+    <p style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 1rem;">例えば...</p>
+</div>
+""", unsafe_allow_html=True)
 
-    research_topic = st.text_area(
-        "リサーチテーマを入力",
-        height=100,
-        placeholder="例: 2024年に業績が伸びそうなAI関連銘柄を分析してください"
-    )
+    # サンプルクエリ
+    sample_queries = [
+        "7203（トヨタ）を分析して",
+        "半導体セクターの見通しは？",
+        "高配当で割安な銘柄を探して",
+        "今の市場環境を教えて"
+    ]
 
-    if st.button("🚀 リサーチ開始", type="primary"):
-        if not research_topic:
-            st.warning("リサーチテーマを入力してください")
-        else:
-            with st.status("🔍 AIエージェント起動...", expanded=True) as status:
-                # リサーチ実行
-                research_result = agent.research_topic(research_topic, status)
+    cols = st.columns(2)
+    for i, query in enumerate(sample_queries):
+        with cols[i % 2]:
+            if st.button(query, key=f"sample_{i}", use_container_width=True):
+                st.session_state.messages.append({"role": "user", "content": query})
+                st.rerun()
 
-                status.update(label="📝 レポート生成中...", state="running")
+# チャット履歴の表示
+for msg in st.session_state.messages:
+    if msg["role"] == "user":
+        st.markdown(f"""
+<div class="message message-user">
+    <div class="message-label">👤 あなた</div>
+    <p>{msg["content"]}</p>
+</div>
+""", unsafe_allow_html=True)
+    else:
+        st.markdown(f"""
+<div class="message message-ai">
+    <div class="message-label">🤖 AI</div>
+    {msg["content"]}
+</div>
+""", unsafe_allow_html=True)
 
-                # レポート生成
-                report_container = st.empty()
-                full_report = ""
+# 入力フォーム
+st.markdown("<div style='height: 120px;'></div>", unsafe_allow_html=True)  # 入力欄のスペース
 
-                prompt_data = f"""
-リサーチテーマ: {research_topic}
+with st.container():
+    col1, col2 = st.columns([5, 1])
 
-収集した情報:
-{research_result['notes']}
+    with col1:
+        user_input = st.text_area(
+            "質問を入力",
+            placeholder="銘柄コード、セクター、投資戦略など何でも質問してください...",
+            height=68,
+            label_visibility="collapsed",
+            key="user_input"
+        )
 
-上記の情報を元に、投資家向けの詳細なレポートを作成してください。
-- エグゼクティブサマリー
-- 調査結果の詳細
-- 投資への示唆
-- リスク要因
+    with col2:
+        send_button = st.button("送信", type="primary", use_container_width=True)
 
-日本語で出力してください。
+
+# 送信処理
+if send_button and user_input and not st.session_state.processing:
+    st.session_state.processing = True
+    st.session_state.messages.append({"role": "user", "content": user_input})
+
+    with st.spinner("分析中..."):
+        try:
+            agent = StockResearchAgent()
+
+            # 銘柄コードの抽出
+            ticker = extract_ticker(user_input)
+
+            # コンテキストの構築
+            context_data = ""
+
+            if ticker:
+                stock_data = analyze_stock(ticker)
+                if stock_data:
+                    info = stock_data["info"]
+                    context_data += f"""
+【銘柄情報】
+銘柄コード: {ticker}
+企業名: {info.get('name', 'N/A')}
+現在株価: ¥{info.get('current_price', 0):,.0f}
+時価総額: ¥{info.get('market_cap', 0):,.0f}
+PER: {info.get('pe_ratio', 'N/A')}
+PBR: {info.get('pb_ratio', 'N/A')}
+配当利回り: {info.get('dividend_yield', 0) * 100 if info.get('dividend_yield') else 0:.2f}%
+ROE: {info.get('roe', 0) * 100 if info.get('roe') else 0:.1f}%
+セクター: {info.get('sector', 'N/A')}
+"""
+                    if stock_data["technical"]:
+                        tech = stock_data["technical"]
+                        context_data += f"""
+【テクニカル分析】
+総合シグナル: {tech.get('overall_signal', 'N/A')}
+スコア: {tech.get('score', 0)}
+買いシグナル数: {tech.get('buy_signals', 0)}
+売りシグナル数: {tech.get('sell_signals', 0)}
+"""
+                    if stock_data["fundamental"]:
+                        fund = stock_data["fundamental"]
+                        context_data += f"""
+【ファンダメンタル分析】
+ファンダメンタルスコア: {fund.get('fundamental_score', 0)}/100
+グレード: {fund.get('fundamental_grade', 'N/A')}
 """
 
-                from langchain_core.prompts import ChatPromptTemplate
-                from langchain_core.output_parsers import StrOutputParser
+            # マクロ情報が必要そうな場合
+            if any(word in user_input for word in ["市場", "環境", "マクロ", "日経", "相場", "セクター"]):
+                macro_data = get_macro_context()
+                regime = macro_data.get("regime", {})
+                context_data += f"""
+【市場環境】
+市場レジーム: {regime.get('regime', 'N/A')}
+リスクレベル: {regime.get('risk_level', 'N/A')}
+"""
+                if macro_data.get("indices", {}).get("nikkei225"):
+                    nk = macro_data["indices"]["nikkei225"]
+                    context_data += f"日経平均: ¥{nk.get('value', 0):,.0f} ({nk.get('change_pct', 0):.2f}%)\n"
+                if macro_data.get("forex", {}).get("usdjpy"):
+                    fx = macro_data["forex"]["usdjpy"]
+                    context_data += f"USD/JPY: ¥{fx.get('rate', 0):.2f}\n"
 
-                report_prompt = ChatPromptTemplate.from_template("""
-{input}
-""")
-                chain = report_prompt | agent.llm | StrOutputParser()
+            # スクリーニングが必要そうな場合
+            if any(word in user_input for word in ["探して", "スクリーニング", "割安", "高配当", "成長", "おすすめ"]):
+                alpha = AlphaFinder()
+                if "割安" in user_input or "バリュー" in user_input:
+                    df = alpha.screen_value_stocks()
+                    if not df.empty:
+                        top_5 = df.head(5)
+                        context_data += "\n【バリュー株スクリーニング結果】\n"
+                        for _, row in top_5.iterrows():
+                            context_data += f"- {row['ticker']}: PER {row.get('per', 'N/A')}, PBR {row.get('pbr', 'N/A')}\n"
 
-                for chunk in chain.stream({"input": prompt_data}):
-                    full_report += chunk
-                    report_container.markdown(full_report)
+                elif "高配当" in user_input:
+                    df = alpha.screen_value_stocks()
+                    if not df.empty:
+                        top_5 = df.sort_values("dividend_yield", ascending=False).head(5)
+                        context_data += "\n【高配当株スクリーニング結果】\n"
+                        for _, row in top_5.iterrows():
+                            yield_pct = row.get('dividend_yield', 0) * 100 if row.get('dividend_yield') else 0
+                            context_data += f"- {row['ticker']}: 配当利回り {yield_pct:.2f}%\n"
 
-                status.update(label="✅ リサーチ完了", state="complete")
+                elif "成長" in user_input or "グロース" in user_input:
+                    df = alpha.screen_growth_stocks()
+                    if not df.empty:
+                        top_5 = df.head(5)
+                        context_data += "\n【グロース株スクリーニング結果】\n"
+                        for _, row in top_5.iterrows():
+                            context_data += f"- {row['ticker']}: 売上成長 {row.get('revenue_growth', 0)*100:.1f}%\n"
 
-                # 生データ表示
-                with st.expander("📚 収集された調査ノート"):
-                    st.text(research_result['notes'])
+            # AIレスポンス生成
+            response_container = st.empty()
+            full_response = ""
+
+            from langchain_core.prompts import ChatPromptTemplate
+            from langchain_core.output_parsers import StrOutputParser
+
+            prompt = ChatPromptTemplate.from_template("""あなたは日本株専門のAIアナリストです。
+ユーザーの質問に対して、専門的かつわかりやすく回答してください。
+
+{context}
+
+ユーザーの質問: {question}
+
+【回答ガイドライン】
+- 簡潔で読みやすい形式で回答
+- 重要なポイントは箇条書きを使用
+- 投資判断に役立つ具体的な情報を提供
+- リスクについても言及
+- 日本語で回答
+
+回答:""")
+
+            chain = prompt | agent.llm | StrOutputParser()
+
+            for chunk in chain.stream({
+                "context": context_data if context_data else "特定の銘柄データはありません。一般的な知識で回答してください。",
+                "question": user_input
+            }):
+                full_response += chunk
+                response_container.markdown(f"""
+<div class="message message-ai">
+    <div class="message-label">🤖 AI</div>
+    {full_response}
+</div>
+""", unsafe_allow_html=True)
+
+            st.session_state.messages.append({"role": "assistant", "content": full_response})
+
+        except Exception as e:
+            error_msg = f"エラーが発生しました: {str(e)}"
+            st.session_state.messages.append({"role": "assistant", "content": error_msg})
+
+    st.session_state.processing = False
+    st.rerun()
 
 
-# --- フッター ---
-st.markdown("---")
+# 免責事項
 st.markdown("""
-<div style="text-align: center; color: #666; font-size: 12px;">
-    📈 日本株リサーチAI | 投資判断は自己責任でお願いいたします。
+<div style="text-align: center; color: var(--text-secondary); font-size: 0.75rem; padding: 1rem 0;">
+    ※ 本サービスは情報提供を目的としており、投資助言ではありません。投資判断は自己責任でお願いします。
 </div>
 """, unsafe_allow_html=True)
