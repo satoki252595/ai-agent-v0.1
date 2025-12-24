@@ -2,6 +2,6 @@ streamlit
 langchain
 langchain-ollama
 langchain-community
-beautifulsoup4
-requests
+trafilatura
+tenacity
 pypdf
