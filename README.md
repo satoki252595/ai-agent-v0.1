@@ -75,6 +75,37 @@ ollama pull nemotron-3-nano
 streamlit run main.py
 ```
 
+## 銘柄データのロード
+
+東証上場全銘柄のデータをDBに格納するには以下を実行：
+
+```bash
+cd app
+
+# 全上場銘柄をロード（JPX公式データ使用、約3800銘柄）
+python -m database.jpx_loader
+
+# 主要100銘柄のみロード（高速）
+python -m database.jpx_loader --major-only
+
+# テスト用：最初の50銘柄のみ
+python -m database.jpx_loader --max 50
+```
+
+### データソース
+
+| データ | ソース | 更新頻度 |
+|--------|--------|----------|
+| 銘柄一覧 | [JPX公式](https://www.jpx.co.jp/markets/statistics-equities/misc/01.html) | 月次 |
+| 株価・出来高 | Yahoo Finance (yfinance) | リアルタイム |
+| 銘柄名 | JPX公式データ（正） | - |
+
+### 処理フロー
+
+```
+JPX Excel → フィルタ（ETF等除外）→ yfinance株価取得 → TinyDB保存
+```
+
 ## 主要ファイル
 
 ```
@@ -83,7 +114,8 @@ app/
 ├── database/
 │   ├── stock_db.py         # TinyDBラッパー
 │   ├── vector_db.py        # ChromaDB + BGE-M3
-│   └── data_loader.py      # Yahoo Finance → DB
+│   ├── jpx_loader.py       # JPX公式データ → DB（全銘柄ロード）
+│   └── data_loader.py      # 個別銘柄ロード
 ├── modules/
 │   ├── stock_data.py       # 株価データ取得
 │   ├── technical.py        # テクニカル分析
