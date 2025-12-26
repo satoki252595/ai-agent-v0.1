@@ -4,29 +4,14 @@
 Japan Stock Research AI Agent
 
 シンプルなチャット形式のAIリサーチアシスタント
-ローカルDB（TinyDB + ChromaDB）と連携
 """
 import streamlit as st
 import sys
 import os
 import re
-from datetime import datetime
 
 # モジュールパスを追加
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-from modules.stock_data import StockDataFetcher
-from modules.technical import TechnicalAnalyzer
-from modules.fundamental import FundamentalAnalyzer
-from modules.macro import MacroAnalyzer
-from modules.patent import PatentResearcher
-from modules.alpha import AlphaFinder
-from modules.news import NewsAnalyzer
-from modules.ai_agent import StockResearchAgent
-
-# データベース
-from database.stock_db import StockDatabase
-from database.vector_db import VectorDatabase
 
 # --- ページ設定 ---
 st.set_page_config(
@@ -110,19 +95,18 @@ if "messages" not in st.session_state:
 if "processing" not in st.session_state:
     st.session_state.processing = False
 
-# データベース初期化（キャッシュ）
+# データベース初期化（遅延ロード）
 @st.cache_resource
 def get_stock_db():
     """構造化DBを取得"""
+    from database.stock_db import StockDatabase
     return StockDatabase()
 
 @st.cache_resource
 def get_vector_db():
     """ベクトルDBを取得"""
+    from database.vector_db import VectorDatabase
     return VectorDatabase()
-
-stock_db = get_stock_db()
-vector_db = get_vector_db()
 
 
 # --- ヘルパー関数 ---
@@ -140,6 +124,13 @@ def analyze_stock(ticker: str) -> dict:
     銘柄を分析してデータを取得
     DBにキャッシュがあれば優先的に使用、なければライブデータを取得してDBに保存
     """
+    from modules.stock_data import StockDataFetcher
+    from modules.technical import TechnicalAnalyzer
+    from modules.fundamental import FundamentalAnalyzer
+
+    stock_db = get_stock_db()
+    vector_db = get_vector_db()
+
     result = {
         "info": None,
         "technical": None,
@@ -219,6 +210,7 @@ def analyze_stock(ticker: str) -> dict:
 
 def get_macro_context() -> dict:
     """マクロ経済コンテキストを取得"""
+    from modules.macro import MacroAnalyzer
     macro = MacroAnalyzer()
     return {
         "indices": macro.get_global_indices(),
@@ -231,6 +223,7 @@ def search_related_info(query: str, ticker: str = None) -> dict:
     """
     ベクトルDBから関連情報をセマンティック検索
     """
+    vector_db = get_vector_db()
     results = {}
 
     # 類似企業を検索
@@ -265,6 +258,7 @@ def get_realtime_news(ticker: str, company_name: str) -> dict:
     Returns:
         ニュース分析結果
     """
+    from modules.news import NewsAnalyzer
     news_analyzer = NewsAnalyzer()
     return news_analyzer.get_realtime_stock_news(ticker, company_name)
 
@@ -301,6 +295,9 @@ if send_button and user_input and not st.session_state.processing:
 
     with st.spinner("分析中..."):
         try:
+            from modules.ai_agent import StockResearchAgent
+            from modules.news import NewsAnalyzer
+            from modules.alpha import AlphaFinder
             agent = StockResearchAgent()
 
             # 銘柄コードの抽出
