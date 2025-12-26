@@ -115,14 +115,14 @@ def filter_stocks(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def fetch_stock_prices(tickers: List[str], batch_size: int = 50, delay: float = 1.0) -> Dict[str, Dict]:
+def fetch_stock_prices(tickers: List[str], batch_size: int = 20, delay: float = 2.0) -> Dict[str, Dict]:
     """
     yfinanceで株価データを取得
 
     Args:
         tickers: 銘柄コードリスト
-        batch_size: バッチサイズ
-        delay: バッチ間の待機時間（秒）
+        batch_size: バッチサイズ（API負荷軽減のため20推奨）
+        delay: バッチ間の待機時間（秒、2.0秒以上推奨）
 
     Returns:
         Dict: 銘柄コード -> 株価データ
@@ -131,8 +131,10 @@ def fetch_stock_prices(tickers: List[str], batch_size: int = 50, delay: float = 
 
     results = {}
     total = len(tickers)
+    retry_count = 3  # リトライ回数
+    retry_delay = 5.0  # リトライ時の待機時間（秒）
 
-    print(f"株価データを取得中（{total}銘柄）...")
+    print(f"株価データを取得中（{total}銘柄、バッチサイズ{batch_size}）...")
 
     for i in range(0, total, batch_size):
         batch = tickers[i:i+batch_size]
@@ -144,46 +146,54 @@ def fetch_stock_prices(tickers: List[str], batch_size: int = 50, delay: float = 
         # yfinance用にティッカーを変換（.T付加）
         yf_tickers = [f"{t}.T" for t in batch]
 
-        try:
-            # バッチダウンロード
-            data = yf.download(
-                yf_tickers,
-                period="5d",
-                group_by="ticker",
-                auto_adjust=True,
-                threads=True,
-                progress=False
-            )
+        # リトライロジック
+        for attempt in range(retry_count):
+            try:
+                # バッチダウンロード
+                data = yf.download(
+                    yf_tickers,
+                    period="5d",
+                    group_by="ticker",
+                    auto_adjust=True,
+                    threads=True,
+                    progress=False
+                )
 
-            success_count = 0
-            for ticker in batch:
-                yf_ticker = f"{ticker}.T"
-                try:
-                    if len(batch) == 1:
-                        ticker_data = data
-                    else:
-                        ticker_data = data[yf_ticker] if yf_ticker in data.columns.get_level_values(0) else None
+                success_count = 0
+                for ticker in batch:
+                    yf_ticker = f"{ticker}.T"
+                    try:
+                        if len(batch) == 1:
+                            ticker_data = data
+                        else:
+                            ticker_data = data[yf_ticker] if yf_ticker in data.columns.get_level_values(0) else None
 
-                    if ticker_data is not None and not ticker_data.empty:
-                        latest = ticker_data.iloc[-1]
-                        results[ticker] = {
-                            'current_price': float(latest['Close']) if pd.notna(latest['Close']) else 0,
-                            'volume': int(latest['Volume']) if pd.notna(latest['Volume']) else 0,
-                            'high': float(latest['High']) if pd.notna(latest['High']) else 0,
-                            'low': float(latest['Low']) if pd.notna(latest['Low']) else 0,
-                            'open': float(latest['Open']) if pd.notna(latest['Open']) else 0,
-                            'date': ticker_data.index[-1].strftime('%Y-%m-%d')
-                        }
-                        success_count += 1
-                except Exception as e:
-                    pass
+                        if ticker_data is not None and not ticker_data.empty:
+                            latest = ticker_data.iloc[-1]
+                            results[ticker] = {
+                                'current_price': float(latest['Close']) if pd.notna(latest['Close']) else 0,
+                                'volume': int(latest['Volume']) if pd.notna(latest['Volume']) else 0,
+                                'high': float(latest['High']) if pd.notna(latest['High']) else 0,
+                                'low': float(latest['Low']) if pd.notna(latest['Low']) else 0,
+                                'open': float(latest['Open']) if pd.notna(latest['Open']) else 0,
+                                'date': ticker_data.index[-1].strftime('%Y-%m-%d')
+                            }
+                            success_count += 1
+                    except Exception as e:
+                        pass
 
-            print(f"    → {success_count}/{len(batch)}件成功")
+                print(f"    → {success_count}/{len(batch)}件成功")
+                break  # 成功したらリトライループを抜ける
 
-        except Exception as e:
-            print(f"    ✗ バッチエラー: {e}")
+            except Exception as e:
+                if attempt < retry_count - 1:
+                    print(f"    ⚠ エラー発生、{retry_delay}秒後にリトライ ({attempt + 1}/{retry_count}): {e}")
+                    time.sleep(retry_delay)
+                    retry_delay *= 1.5  # 指数バックオフ
+                else:
+                    print(f"    ✗ バッチエラー（リトライ上限）: {e}")
 
-        # レート制限対策
+        # レート制限対策: バッチ間で必ず待機
         if i + batch_size < total:
             time.sleep(delay)
 
@@ -193,8 +203,8 @@ def fetch_stock_prices(tickers: List[str], batch_size: int = 50, delay: float = 
 
 def load_all_stocks(
     stock_db: StockDatabase = None,
-    batch_size: int = 50,
-    delay: float = 1.0,
+    batch_size: int = 20,
+    delay: float = 2.0,
     max_stocks: int = None,
     verbose: bool = True
 ) -> Dict[str, any]:
@@ -203,8 +213,8 @@ def load_all_stocks(
 
     Args:
         stock_db: StockDatabaseインスタンス
-        batch_size: 株価取得時のバッチサイズ
-        delay: バッチ間待機時間
+        batch_size: 株価取得時のバッチサイズ（20推奨、API負荷軽減）
+        delay: バッチ間待機時間（2.0秒以上推奨）
         max_stocks: 最大取得銘柄数（テスト用）
         verbose: 詳細出力
 
@@ -403,13 +413,14 @@ MAJOR_STOCKS = [
 ]
 
 
-def load_major_stocks(stock_db: StockDatabase = None, verbose: bool = True) -> Dict[str, any]:
+def load_major_stocks(stock_db: StockDatabase = None, verbose: bool = True, delay: float = 1.5) -> Dict[str, any]:
     """
     主要銘柄のみをロード（ネットワーク制限時のフォールバック）
 
     Args:
         stock_db: StockDatabaseインスタンス
         verbose: 詳細出力
+        delay: 銘柄間の待機時間（秒、1.5秒以上推奨）
 
     Returns:
         Dict: 結果サマリー
@@ -424,54 +435,70 @@ def load_major_stocks(stock_db: StockDatabase = None, verbose: bool = True) -> D
         'failed': []
     }
 
-    print(f"主要{len(MAJOR_STOCKS)}銘柄をロード中...")
+    retry_count = 3  # リトライ回数
 
-    for ticker, name in MAJOR_STOCKS:
-        try:
-            yf_ticker = f"{ticker}.T"
-            stock = yf.Ticker(yf_ticker)
+    print(f"主要{len(MAJOR_STOCKS)}銘柄をロード中（待機時間: {delay}秒/銘柄）...")
 
-            # 株価データを取得
-            hist = stock.history(period="5d")
+    for idx, (ticker, name) in enumerate(MAJOR_STOCKS):
+        # リトライロジック
+        for attempt in range(retry_count):
+            try:
+                yf_ticker = f"{ticker}.T"
+                stock = yf.Ticker(yf_ticker)
 
-            if hist.empty:
-                results['failed'].append(ticker)
+                # 株価データを取得
+                hist = stock.history(period="5d")
+
+                if hist.empty:
+                    if attempt < retry_count - 1:
+                        time.sleep(2.0)  # リトライ前に待機
+                        continue
+                    results['failed'].append(ticker)
+                    if verbose:
+                        print(f"  ✗ {ticker} ({name}): データなし")
+                    break
+
+                latest = hist.iloc[-1]
+                info = stock.info
+
+                stock_data = {
+                    'ticker': ticker,
+                    'name': name,  # ハードコードした日本語名を使用
+                    'current_price': float(latest['Close']) if pd.notna(latest['Close']) else 0,
+                    'volume': int(latest['Volume']) if pd.notna(latest['Volume']) else 0,
+                    'high': float(latest['High']) if pd.notna(latest['High']) else 0,
+                    'low': float(latest['Low']) if pd.notna(latest['Low']) else 0,
+                    'open': float(latest['Open']) if pd.notna(latest['Open']) else 0,
+                    'market_cap': info.get('marketCap', 0),
+                    'pe_ratio': info.get('trailingPE'),
+                    'pb_ratio': info.get('priceToBook'),
+                    'dividend_yield': info.get('dividendYield'),
+                    'sector': info.get('sector', ''),
+                    'industry': info.get('industry', ''),
+                }
+
+                stock_db.upsert_stock(ticker, stock_data)
+                results['success'].append(ticker)
+
                 if verbose:
-                    print(f"  ✗ {ticker} ({name}): データなし")
-                continue
+                    print(f"  ✓ [{idx+1}/{len(MAJOR_STOCKS)}] {ticker} ({name}): ¥{stock_data['current_price']:,.0f}")
 
-            latest = hist.iloc[-1]
-            info = stock.info
+                break  # 成功したらリトライループを抜ける
 
-            stock_data = {
-                'ticker': ticker,
-                'name': name,  # ハードコードした日本語名を使用
-                'current_price': float(latest['Close']) if pd.notna(latest['Close']) else 0,
-                'volume': int(latest['Volume']) if pd.notna(latest['Volume']) else 0,
-                'high': float(latest['High']) if pd.notna(latest['High']) else 0,
-                'low': float(latest['Low']) if pd.notna(latest['Low']) else 0,
-                'open': float(latest['Open']) if pd.notna(latest['Open']) else 0,
-                'market_cap': info.get('marketCap', 0),
-                'pe_ratio': info.get('trailingPE'),
-                'pb_ratio': info.get('priceToBook'),
-                'dividend_yield': info.get('dividendYield'),
-                'sector': info.get('sector', ''),
-                'industry': info.get('industry', ''),
-            }
+            except Exception as e:
+                if attempt < retry_count - 1:
+                    retry_wait = 3.0 * (attempt + 1)  # 指数バックオフ
+                    if verbose:
+                        print(f"  ⚠ {ticker}: エラー発生、{retry_wait}秒後にリトライ ({attempt + 1}/{retry_count})")
+                    time.sleep(retry_wait)
+                else:
+                    results['failed'].append(ticker)
+                    if verbose:
+                        print(f"  ✗ {ticker} ({name}): {e}")
 
-            stock_db.upsert_stock(ticker, stock_data)
-            results['success'].append(ticker)
-
-            if verbose:
-                print(f"  ✓ {ticker} ({name}): ¥{stock_data['current_price']:,.0f}")
-
-            # レート制限対策
-            time.sleep(0.5)
-
-        except Exception as e:
-            results['failed'].append(ticker)
-            if verbose:
-                print(f"  ✗ {ticker} ({name}): {e}")
+        # レート制限対策: 各銘柄の処理後に待機
+        if idx < len(MAJOR_STOCKS) - 1:
+            time.sleep(delay)
 
     stock_db.close()
 
