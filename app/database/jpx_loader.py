@@ -90,24 +90,31 @@ def filter_stocks(df: pd.DataFrame) -> pd.DataFrame:
         elif col_str == '17業種区分':
             col_mapping[col] = 'sector_17'
 
+    print(f"  マッピング: {col_mapping}")
     if col_mapping:
         df = df.rename(columns=col_mapping)
+    print(f"  変換後カラム: {df.columns.tolist()}")
 
     original_count = len(df)
 
     # 市場区分で除外
     if 'market' in df.columns:
+        market_col = df['market'].astype(str)
         for exclude_market in EXCLUDE_MARKETS:
-            df = df[~df['market'].astype(str).str.contains(exclude_market, na=False)]
+            df = df[~market_col.str.contains(exclude_market, na=False)]
+            market_col = df['market'].astype(str)
 
     # 銘柄名でETF等を除外
     if 'name' in df.columns:
+        name_col = df['name'].astype(str)
         for keyword in EXCLUDE_KEYWORDS:
-            df = df[~df['name'].astype(str).str.contains(keyword, na=False)]
+            df = df[~name_col.str.contains(keyword, na=False)]
+            name_col = df['name'].astype(str)
 
     # 銘柄コードが4桁の数値のものだけに絞る
     if 'ticker' in df.columns:
-        df['ticker'] = df['ticker'].astype(str).str.strip()
+        ticker_col = df['ticker'].astype(str).str.strip()
+        df = df.assign(ticker=ticker_col)
         df = df[df['ticker'].str.match(r'^\d{4}$', na=False)]
 
     filtered_count = len(df)
