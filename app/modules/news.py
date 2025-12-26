@@ -157,6 +157,163 @@ class NewsAnalyzer:
         except:
             return []
 
+    @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
+    def search_ir_news(self, company_name: str, ticker: str = None, max_results: int = 10) -> List[NewsArticle]:
+        """
+        IR（投資家向け広報）関連ニュースを検索
+
+        Args:
+            company_name: 企業名
+            ticker: 銘柄コード（オプション）
+            max_results: 最大取得件数
+
+        Returns:
+            IRニュース記事リスト
+        """
+        articles = []
+        queries = [
+            f"{company_name} IR 決算発表 OR 業績予想修正 OR 配当",
+            f"{company_name} 自社株買い OR 増配 OR 減配 OR 株式分割",
+            f"{company_name} M&A OR 提携 OR 新規事業 OR 設備投資",
+        ]
+
+        if ticker:
+            queries.append(f"{ticker} 株価 材料 OR 開示 OR プレスリリース")
+
+        try:
+            with DDGS() as ddgs:
+                seen_urls = set()
+                for query in queries:
+                    results = list(ddgs.text(
+                        query,
+                        region='jp-jp',
+                        safesearch='off',
+                        max_results=max_results // len(queries) + 1
+                    ))
+
+                    for r in results:
+                        url = r.get("href", "")
+                        if url in seen_urls:
+                            continue
+                        seen_urls.add(url)
+
+                        sentiment = self._analyze_sentiment(r.get("title", "") + " " + r.get("body", ""))
+                        articles.append(NewsArticle(
+                            title=r.get("title", ""),
+                            url=url,
+                            source=self._extract_source(url),
+                            snippet=r.get("body", ""),
+                            sentiment=sentiment
+                        ))
+
+                        if len(articles) >= max_results:
+                            break
+
+            return articles[:max_results]
+        except Exception as e:
+            print(f"IR news search error: {e}")
+            return []
+
+    def get_realtime_stock_news(self, ticker: str, company_name: str, max_results: int = 8) -> Dict:
+        """
+        リアルタイムで株式関連ニュースを取得・分析
+
+        Args:
+            ticker: 銘柄コード
+            company_name: 企業名
+            max_results: 最大取得件数
+
+        Returns:
+            ニュース分析結果
+        """
+        all_articles = []
+        seen_urls = set()
+
+        # IR関連ニュース
+        ir_news = self.search_ir_news(company_name, ticker, max_results=5)
+        for article in ir_news:
+            if article.url not in seen_urls:
+                seen_urls.add(article.url)
+                all_articles.append(article)
+
+        # 一般株価ニュース
+        ticker_news = self.search_ticker_news(ticker, max_results=5)
+        for article in ticker_news:
+            if article.url not in seen_urls:
+                seen_urls.add(article.url)
+                all_articles.append(article)
+
+        # センチメント計算
+        sentiment_score = self.get_sentiment_score(all_articles)
+
+        # IRニュースを分類
+        ir_articles = [a for a in all_articles if any(kw in a.title for kw in
+            ["決算", "業績", "IR", "配当", "自社株買", "株式分割", "M&A", "提携", "開示"])]
+        general_articles = [a for a in all_articles if a not in ir_articles]
+
+        return {
+            "ticker": ticker,
+            "company_name": company_name,
+            "total_articles": len(all_articles),
+            "sentiment_score": sentiment_score["score"],
+            "overall_sentiment": sentiment_score["sentiment"],
+            "positive_count": sentiment_score["positive_count"],
+            "negative_count": sentiment_score["negative_count"],
+            "ir_news": [
+                {
+                    "title": a.title,
+                    "url": a.url,
+                    "source": a.source,
+                    "snippet": a.snippet[:150] + "..." if len(a.snippet) > 150 else a.snippet,
+                    "sentiment": a.sentiment
+                }
+                for a in ir_articles[:5]
+            ],
+            "general_news": [
+                {
+                    "title": a.title,
+                    "url": a.url,
+                    "source": a.source,
+                    "snippet": a.snippet[:150] + "..." if len(a.snippet) > 150 else a.snippet,
+                    "sentiment": a.sentiment
+                }
+                for a in general_articles[:5]
+            ],
+            "news_summary": self._generate_news_summary(all_articles, sentiment_score)
+        }
+
+    def _generate_news_summary(self, articles: List[NewsArticle], score: Dict) -> str:
+        """ニュースサマリーを生成"""
+        if not articles:
+            return "直近のニュースは見つかりませんでした。"
+
+        sentiment = score["sentiment"]
+        total = len(articles)
+
+        if sentiment == "ポジティブ":
+            base = f"直近{total}件のニュースは全体的にポジティブな内容が多く、好材料が出ています。"
+        elif sentiment == "ネガティブ":
+            base = f"直近{total}件のニュースには注意が必要な内容が含まれています。"
+        else:
+            base = f"直近{total}件のニュースは中立的な内容が中心です。"
+
+        # 主要トピック抽出
+        topics = []
+        for article in articles[:3]:
+            if "決算" in article.title:
+                topics.append("決算関連")
+            elif "配当" in article.title:
+                topics.append("配当関連")
+            elif "M&A" in article.title or "提携" in article.title:
+                topics.append("事業戦略")
+            elif "株価" in article.title:
+                topics.append("株価動向")
+
+        if topics:
+            base += f" 主なトピック: {', '.join(set(topics))}"
+
+        return base
+
     def search_market_news(self, max_results: int = 10) -> List[NewsArticle]:
         """
         市場全体のニュースを検索

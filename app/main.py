@@ -541,6 +541,25 @@ def get_db_stats() -> dict:
     return stats
 
 
+def get_realtime_news(ticker: str, company_name: str) -> dict:
+    """
+    リアルタイムで株式ニュースを取得・分析
+
+    Args:
+        ticker: 銘柄コード
+        company_name: 企業名
+
+    Returns:
+        ニュース分析結果
+    """
+    try:
+        news_analyzer = NewsAnalyzer()
+        return news_analyzer.get_realtime_stock_news(ticker, company_name)
+    except Exception as e:
+        print(f"News fetch error: {e}")
+        return None
+
+
 # --- メインUI ---
 # ヘッダー
 st.markdown("""
@@ -643,10 +662,12 @@ if send_button and user_input and not st.session_state.processing:
                 stock_data = analyze_stock(ticker)
                 if stock_data:
                     info = stock_data["info"]
+                    company_name = info.get('name', '')
+
                     context_data += f"""
 【銘柄情報】
 銘柄コード: {ticker}
-企業名: {info.get('name', 'N/A')}
+企業名: {company_name}
 現在株価: ¥{info.get('current_price', 0):,.0f}
 時価総額: ¥{info.get('market_cap', 0):,.0f}
 PER: {info.get('pe_ratio', 'N/A')}
@@ -671,6 +692,32 @@ ROE: {info.get('roe', 0) * 100 if info.get('roe') else 0:.1f}%
 ファンダメンタルスコア: {fund.get('fundamental_score', 0)}/100
 グレード: {fund.get('fundamental_grade', 'N/A')}
 """
+                    # リアルタイムニュース検索
+                    news_data = get_realtime_news(ticker, company_name)
+                    if news_data:
+                        context_data += f"""
+【最新ニュース・IR情報】
+センチメントスコア: {news_data.get('sentiment_score', 50)}/100
+総合センチメント: {news_data.get('overall_sentiment', '中立')}
+ポジティブニュース: {news_data.get('positive_count', 0)}件
+ネガティブニュース: {news_data.get('negative_count', 0)}件
+サマリー: {news_data.get('news_summary', '')}
+"""
+                        # IRニュース
+                        ir_news = news_data.get('ir_news', [])
+                        if ir_news:
+                            context_data += "\n【IR関連ニュース】\n"
+                            for article in ir_news[:3]:
+                                sentiment_mark = "📈" if article.get('sentiment') == "ポジティブ" else "📉" if article.get('sentiment') == "ネガティブ" else "➖"
+                                context_data += f"- {sentiment_mark} {article.get('title', '')[:60]}... ({article.get('source', '')})\n"
+
+                        # 一般ニュース
+                        general_news = news_data.get('general_news', [])
+                        if general_news:
+                            context_data += "\n【一般ニュース】\n"
+                            for article in general_news[:3]:
+                                sentiment_mark = "📈" if article.get('sentiment') == "ポジティブ" else "📉" if article.get('sentiment') == "ネガティブ" else "➖"
+                                context_data += f"- {sentiment_mark} {article.get('title', '')[:60]}... ({article.get('source', '')})\n"
 
             # マクロ情報が必要そうな場合
             if any(word in user_input for word in ["市場", "環境", "マクロ", "日経", "相場", "セクター"]):
@@ -687,6 +734,26 @@ ROE: {info.get('roe', 0) * 100 if info.get('roe') else 0:.1f}%
                 if macro_data.get("forex", {}).get("usdjpy"):
                     fx = macro_data["forex"]["usdjpy"]
                     context_data += f"USD/JPY: ¥{fx.get('rate', 0):.2f}\n"
+
+                # 市場ニュースを取得
+                try:
+                    news_analyzer = NewsAnalyzer()
+                    market_sentiment = news_analyzer.get_market_sentiment()
+                    if market_sentiment:
+                        context_data += f"""
+【市場センチメント】
+市場センチメントスコア: {market_sentiment.get('market_sentiment_score', 50)}/100
+市場センチメント: {market_sentiment.get('market_sentiment', '中立')}
+サマリー: {market_sentiment.get('summary', '')}
+"""
+                        top_news = market_sentiment.get('top_news', [])
+                        if top_news:
+                            context_data += "\n【本日の主要ニュース】\n"
+                            for article in top_news[:4]:
+                                sentiment_mark = "📈" if article.get('sentiment') == "ポジティブ" else "📉" if article.get('sentiment') == "ネガティブ" else "➖"
+                                context_data += f"- {sentiment_mark} {article.get('title', '')[:50]}... ({article.get('source', '')})\n"
+                except:
+                    pass
 
             # スクリーニングが必要そうな場合
             if any(word in user_input for word in ["探して", "スクリーニング", "割安", "高配当", "成長", "おすすめ"]):
@@ -736,6 +803,12 @@ ROE: {info.get('roe', 0) * 100 if info.get('roe') else 0:.1f}%
 - 投資判断に役立つ具体的な情報を提供
 - リスクについても言及
 - 日本語で回答
+
+【ニュース・IR情報の活用】
+- 最新ニュースやIR情報が提供されている場合は、必ず分析に反映
+- センチメント（ポジティブ/ネガティブ）を考慮した見通しを提示
+- 決算・配当・M&A等の重要IRは投資判断の材料として言及
+- ニュースのトレンドから短期的な株価への影響を推測
 
 回答:""")
 
