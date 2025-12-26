@@ -78,15 +78,16 @@ def filter_stocks(df: pd.DataFrame) -> pd.DataFrame:
     col_mapping = {}
     for col in df.columns:
         col_str = str(col).strip()
-        if 'コード' in col_str:
+        # 完全一致または先頭一致で判定（誤マッピング防止）
+        if col_str == 'コード':
             col_mapping[col] = 'ticker'
-        elif '銘柄名' in col_str or '名称' in col_str:
+        elif '銘柄名' in col_str or col_str == '名称':
             col_mapping[col] = 'name'
-        elif '市場' in col_str:
+        elif col_str == '市場・商品区分' or col_str == '市場区分':
             col_mapping[col] = 'market'
-        elif '33業種' in col_str or '業種' in col_str:
+        elif col_str == '33業種区分':
             col_mapping[col] = 'sector_33'
-        elif '17業種' in col_str:
+        elif col_str == '17業種区分':
             col_mapping[col] = 'sector_17'
 
     if col_mapping:
