@@ -36,329 +36,69 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- モバイルファーストCSS ---
+# --- シンプルCSS ---
 st.markdown("""
 <style>
-    /* ベースリセット */
-    * {
-        box-sizing: border-box;
-    }
-
-    /* ルート変数 */
     :root {
         --primary: #6366f1;
-        --primary-dark: #4f46e5;
         --bg-dark: #0f0f0f;
         --bg-card: #1a1a1a;
         --bg-input: #252525;
         --text-primary: #ffffff;
         --text-secondary: #a1a1aa;
         --border: #2a2a2a;
-        --success: #22c55e;
-        --warning: #f59e0b;
-        --danger: #ef4444;
     }
 
-    /* アプリ全体 */
     .stApp {
         background: var(--bg-dark) !important;
         color: var(--text-primary) !important;
     }
 
-    /* サイドバー非表示 */
-    [data-testid="stSidebar"] {
-        display: none;
-    }
+    [data-testid="stSidebar"] { display: none; }
+    [data-testid="stHeader"] { background: transparent !important; }
+    footer { display: none !important; }
 
-    /* メインコンテンツ - モバイル最適化 */
     .main .block-container {
         padding: 1rem !important;
-        max-width: 100% !important;
+        max-width: 800px !important;
     }
 
-    @media (min-width: 768px) {
-        .main .block-container {
-            padding: 2rem !important;
-            max-width: 800px !important;
-        }
-    }
-
-    /* ヘッダー */
-    .app-header {
+    .app-title {
         text-align: center;
-        padding: 1.5rem 0;
-        margin-bottom: 1rem;
-    }
-
-    .app-header h1 {
-        font-size: 1.75rem;
+        font-size: 1.5rem;
         font-weight: 700;
-        margin: 0;
-        background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
+        padding: 1rem 0;
+        color: var(--primary);
     }
 
-    .app-header p {
-        color: var(--text-secondary);
-        font-size: 0.875rem;
-        margin: 0.5rem 0 0 0;
-    }
-
-    /* チャットコンテナ */
-    .chat-container {
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
-        min-height: 50vh;
-        padding-bottom: 100px;
-    }
-
-    /* メッセージバブル */
     .message {
         padding: 1rem;
-        border-radius: 1rem;
-        max-width: 100%;
-        animation: fadeIn 0.3s ease;
-    }
-
-    @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(10px); }
-        to { opacity: 1; transform: translateY(0); }
+        border-radius: 0.75rem;
+        margin-bottom: 0.75rem;
     }
 
     .message-user {
-        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        background: var(--primary);
         color: white;
-        margin-left: 1rem;
-        border-bottom-right-radius: 0.25rem;
     }
 
     .message-ai {
         background: var(--bg-card);
         border: 1px solid var(--border);
-        border-bottom-left-radius: 0.25rem;
     }
 
-    .message-label {
-        font-size: 0.75rem;
-        color: var(--text-secondary);
-        margin-bottom: 0.5rem;
-        font-weight: 600;
-    }
-
-    .message-user .message-label {
-        color: rgba(255,255,255,0.8);
-    }
-
-    /* 入力エリア */
-    .input-container {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        background: var(--bg-dark);
-        border-top: 1px solid var(--border);
-        padding: 1rem;
-        z-index: 1000;
-    }
-
-    .input-wrapper {
-        max-width: 800px;
-        margin: 0 auto;
-        display: flex;
-        gap: 0.75rem;
-    }
-
-    /* テキストエリア */
     .stTextArea textarea {
         background: var(--bg-input) !important;
         border: 1px solid var(--border) !important;
-        border-radius: 1rem !important;
+        border-radius: 0.5rem !important;
         color: var(--text-primary) !important;
-        font-size: 1rem !important;
-        padding: 1rem !important;
-        min-height: 56px !important;
-        resize: none !important;
     }
 
-    .stTextArea textarea:focus {
-        border-color: var(--primary) !important;
-        box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2) !important;
-    }
-
-    .stTextArea textarea::placeholder {
-        color: var(--text-secondary) !important;
-    }
-
-    /* 送信ボタン */
     .stButton > button {
-        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
+        background: var(--primary) !important;
         color: white !important;
         border: none !important;
-        border-radius: 1rem !important;
-        padding: 0.875rem 1.5rem !important;
-        font-weight: 600 !important;
-        font-size: 1rem !important;
-        min-height: 56px !important;
-        transition: all 0.2s ease !important;
-    }
-
-    .stButton > button:hover {
-        transform: translateY(-1px) !important;
-        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4) !important;
-    }
-
-    .stButton > button:active {
-        transform: translateY(0) !important;
-    }
-
-    /* ステータスインジケーター */
-    .status-indicator {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.5rem 1rem;
-        background: var(--bg-card);
-        border-radius: 2rem;
-        font-size: 0.875rem;
-        color: var(--text-secondary);
-        margin-bottom: 1rem;
-    }
-
-    .status-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: var(--success);
-        animation: pulse 2s infinite;
-    }
-
-    @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.5; }
-    }
-
-    /* サンプルクエリ */
-    .sample-queries {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-        margin: 1rem 0;
-    }
-
-    .sample-query {
-        background: var(--bg-card);
-        border: 1px solid var(--border);
-        border-radius: 2rem;
-        padding: 0.5rem 1rem;
-        font-size: 0.8125rem;
-        color: var(--text-secondary);
-        cursor: pointer;
-        transition: all 0.2s ease;
-    }
-
-    .sample-query:hover {
-        border-color: var(--primary);
-        color: var(--primary);
-    }
-
-    /* レスポンスカード */
-    .response-card {
-        background: var(--bg-card);
-        border: 1px solid var(--border);
-        border-radius: 1rem;
-        padding: 1rem;
-        margin: 0.5rem 0;
-    }
-
-    .response-card h4 {
-        font-size: 0.875rem;
-        color: var(--text-secondary);
-        margin: 0 0 0.5rem 0;
-        font-weight: 600;
-    }
-
-    /* データ表示 */
-    .data-grid {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 0.75rem;
-        margin: 1rem 0;
-    }
-
-    @media (min-width: 768px) {
-        .data-grid {
-            grid-template-columns: repeat(4, 1fr);
-        }
-    }
-
-    .data-item {
-        background: var(--bg-input);
-        border-radius: 0.75rem;
-        padding: 0.75rem;
-        text-align: center;
-    }
-
-    .data-label {
-        font-size: 0.75rem;
-        color: var(--text-secondary);
-        margin-bottom: 0.25rem;
-    }
-
-    .data-value {
-        font-size: 1.125rem;
-        font-weight: 700;
-        color: var(--text-primary);
-    }
-
-    .data-value.positive { color: var(--success); }
-    .data-value.negative { color: var(--danger); }
-
-    /* スピナー */
-    .stSpinner > div {
-        border-top-color: var(--primary) !important;
-    }
-
-    /* マークダウンスタイル */
-    .message-ai h1, .message-ai h2, .message-ai h3 {
-        color: var(--text-primary);
-        margin-top: 1rem;
-    }
-
-    .message-ai h1 { font-size: 1.25rem; }
-    .message-ai h2 { font-size: 1.125rem; }
-    .message-ai h3 { font-size: 1rem; }
-
-    .message-ai ul, .message-ai ol {
-        padding-left: 1.5rem;
-        color: var(--text-secondary);
-    }
-
-    .message-ai li {
-        margin: 0.25rem 0;
-    }
-
-    .message-ai strong {
-        color: var(--text-primary);
-    }
-
-    /* フッター非表示 */
-    footer { display: none !important; }
-
-    /* Streamlitデフォルトを上書き */
-    .stMarkdown { color: inherit; }
-
-    [data-testid="stHeader"] {
-        background: transparent !important;
-    }
-
-    /* 区切り線 */
-    hr {
-        border: none;
-        border-top: 1px solid var(--border);
-        margin: 1rem 0;
+        border-radius: 0.5rem !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -514,13 +254,6 @@ def search_related_info(query: str, ticker: str = None) -> dict:
     return results
 
 
-def get_db_stats() -> dict:
-    """DB統計を取得"""
-    stats = {"stock_db": stock_db.get_stats()}
-    stats["vector_db"] = vector_db.get_stats()
-    return stats
-
-
 def get_realtime_news(ticker: str, company_name: str) -> dict:
     """
     リアルタイムで株式ニュースを取得・分析
@@ -537,85 +270,28 @@ def get_realtime_news(ticker: str, company_name: str) -> dict:
 
 
 # --- メインUI ---
-# ヘッダー
-st.markdown("""
-<div class="app-header">
-    <h1>🤖 日本株リサーチAI</h1>
-    <p>AIがあなたの投資リサーチをサポートします</p>
-</div>
-""", unsafe_allow_html=True)
-
-# ステータス（DB接続状態を表示）
-db_stats = get_db_stats()
-stocks_in_db = db_stats.get("stock_db", {}).get("stocks_count", 0)
-
-st.markdown(f"""
-<div class="status-indicator">
-    <span class="status-dot"></span>
-    <span>AI Ready | DB: {stocks_in_db}銘柄 | Vector検索可</span>
-</div>
-""", unsafe_allow_html=True)
-
-# チャット履歴がない場合のウェルカムメッセージ
-if not st.session_state.messages:
-    st.markdown("""
-<div class="message message-ai">
-    <div class="message-label">🤖 AI</div>
-    <p>こんにちは！日本株リサーチAIです。</p>
-    <p>銘柄分析、市場動向、投資戦略など、何でもお聞きください。</p>
-    <p style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 1rem;">例えば...</p>
-</div>
-""", unsafe_allow_html=True)
-
-    # サンプルクエリ
-    sample_queries = [
-        "7203（トヨタ）を分析して",
-        "半導体セクターの見通しは？",
-        "高配当で割安な銘柄を探して",
-        "今の市場環境を教えて"
-    ]
-
-    cols = st.columns(2)
-    for i, query in enumerate(sample_queries):
-        with cols[i % 2]:
-            if st.button(query, key=f"sample_{i}", use_container_width=True):
-                st.session_state.messages.append({"role": "user", "content": query})
-                st.rerun()
+# サービス名
+st.markdown('<div class="app-title">日本株リサーチAI</div>', unsafe_allow_html=True)
 
 # チャット履歴の表示
 for msg in st.session_state.messages:
     if msg["role"] == "user":
-        st.markdown(f"""
-<div class="message message-user">
-    <div class="message-label">👤 あなた</div>
-    <p>{msg["content"]}</p>
-</div>
-""", unsafe_allow_html=True)
+        st.markdown(f'<div class="message message-user">{msg["content"]}</div>', unsafe_allow_html=True)
     else:
-        st.markdown(f"""
-<div class="message message-ai">
-    <div class="message-label">🤖 AI</div>
-    {msg["content"]}
-</div>
-""", unsafe_allow_html=True)
+        st.markdown(f'<div class="message message-ai">{msg["content"]}</div>', unsafe_allow_html=True)
 
 # 入力フォーム
-st.markdown("<div style='height: 120px;'></div>", unsafe_allow_html=True)  # 入力欄のスペース
-
-with st.container():
-    col1, col2 = st.columns([5, 1])
-
-    with col1:
-        user_input = st.text_area(
-            "質問を入力",
-            placeholder="銘柄コード、セクター、投資戦略など何でも質問してください...",
-            height=68,
-            label_visibility="collapsed",
-            key="user_input"
-        )
-
-    with col2:
-        send_button = st.button("送信", type="primary", use_container_width=True)
+col1, col2 = st.columns([5, 1])
+with col1:
+    user_input = st.text_area(
+        "質問",
+        placeholder="質問を入力...",
+        height=68,
+        label_visibility="collapsed",
+        key="user_input"
+    )
+with col2:
+    send_button = st.button("送信", type="primary", use_container_width=True)
 
 
 # 送信処理
@@ -791,12 +467,7 @@ ROE: {info.get('roe', 0) * 100 if info.get('roe') else 0:.1f}%
                 "question": user_input
             }):
                 full_response += chunk
-                response_container.markdown(f"""
-<div class="message message-ai">
-    <div class="message-label">🤖 AI</div>
-    {full_response}
-</div>
-""", unsafe_allow_html=True)
+                response_container.markdown(f'<div class="message message-ai">{full_response}</div>', unsafe_allow_html=True)
 
             st.session_state.messages.append({"role": "assistant", "content": full_response})
 
@@ -806,11 +477,3 @@ ROE: {info.get('roe', 0) * 100 if info.get('roe') else 0:.1f}%
 
     st.session_state.processing = False
     st.rerun()
-
-
-# 免責事項
-st.markdown("""
-<div style="text-align: center; color: var(--text-secondary); font-size: 0.75rem; padding: 1rem 0;">
-    ※ 本サービスは情報提供を目的としており、投資助言ではありません。投資判断は自己責任でお願いします。
-</div>
-""", unsafe_allow_html=True)
