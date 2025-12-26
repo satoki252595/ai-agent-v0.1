@@ -428,6 +428,11 @@ ROE: {info.get('roe', 0) * 100 if info.get('roe') else 0:.1f}%
                         for _, row in top_5.iterrows():
                             context_data += f"- {row['ticker']}: 売上成長 {row.get('revenue_growth', 0)*100:.1f}%\n"
 
+            # デバッグ: 取得したコンテキストを表示（開発用）
+            if context_data:
+                with st.expander("取得データ（デバッグ用）", expanded=False):
+                    st.text(context_data[:2000] if len(context_data) > 2000 else context_data)
+
             # AIレスポンス生成
             response_container = st.empty()
             full_response = ""
@@ -435,32 +440,37 @@ ROE: {info.get('roe', 0) * 100 if info.get('roe') else 0:.1f}%
             from langchain_core.prompts import ChatPromptTemplate
             from langchain_core.output_parsers import StrOutputParser
 
+            # データ有無を明示
+            has_data = bool(context_data.strip())
+
             prompt = ChatPromptTemplate.from_template("""あなたは日本株専門のAIアナリストです。
-ユーザーの質問に対して、専門的かつわかりやすく回答してください。
+
+【最重要ルール - 必ず守ること】
+- 提供されたデータのみを使用して回答すること
+- データにない情報は「データがありません」と正直に回答すること
+- 数値（PER、PBR、株価、成長率等）を推測・創作しないこと
+- 知らない企業について詳細を語らないこと
 
 {context}
 
 ユーザーの質問: {question}
 
 【回答ガイドライン】
-- 簡潔で読みやすい形式で回答
-- 重要なポイントは箇条書きを使用
-- 投資判断に役立つ具体的な情報を提供
-- リスクについても言及
+- 上記のコンテキストに含まれる情報のみを使用
+- データがない項目は「不明」「データなし」と明記
+- 簡潔で読みやすい形式
 - 日本語で回答
-
-【ニュース・IR情報の活用】
-- 最新ニュースやIR情報が提供されている場合は、必ず分析に反映
-- センチメント（ポジティブ/ネガティブ）を考慮した見通しを提示
-- 決算・配当・M&A等の重要IRは投資判断の材料として言及
-- ニュースのトレンドから短期的な株価への影響を推測
 
 回答:""")
 
             chain = prompt | agent.llm | StrOutputParser()
 
+            # コンテキストがない場合の警告
+            if not has_data:
+                context_data = "【注意】この銘柄のデータを取得できませんでした。一般的な情報のみで回答します。具体的な数値は提供できません。"
+
             for chunk in chain.stream({
-                "context": context_data if context_data else "特定の銘柄データはありません。一般的な知識で回答してください。",
+                "context": context_data,
                 "question": user_input
             }):
                 full_response += chunk
