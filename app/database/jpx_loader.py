@@ -305,7 +305,7 @@ def load_all_stocks(
     return results
 
 
-# 主要銘柄リスト（ネットワーク制限時のフォールバック用）
+# 主要銘柄リスト（日経225主要銘柄）
 MAJOR_STOCKS = [
     # 日経225主要銘柄
     ("7203", "トヨタ自動車"),
@@ -415,7 +415,7 @@ MAJOR_STOCKS = [
 
 def load_major_stocks(stock_db: StockDatabase = None, verbose: bool = True, delay: float = 1.5) -> Dict[str, any]:
     """
-    主要銘柄のみをロード（ネットワーク制限時のフォールバック）
+    主要銘柄のみをロード（高速ロード用）
 
     Args:
         stock_db: StockDatabaseインスタンス

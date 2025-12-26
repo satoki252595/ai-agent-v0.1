@@ -26,11 +26,7 @@ from modules.ai_agent import StockResearchAgent
 
 # データベース
 from database.stock_db import StockDatabase
-try:
-    from database.vector_db import VectorDatabase
-    VECTOR_DB_AVAILABLE = True
-except ImportError:
-    VECTOR_DB_AVAILABLE = False
+from database.vector_db import VectorDatabase
 
 # --- ページ設定 ---
 st.set_page_config(
@@ -383,13 +379,7 @@ def get_stock_db():
 @st.cache_resource
 def get_vector_db():
     """ベクトルDBを取得"""
-    if VECTOR_DB_AVAILABLE:
-        try:
-            return VectorDatabase()
-        except Exception as e:
-            st.warning(f"VectorDB初期化エラー: {e}")
-            return None
-    return None
+    return VectorDatabase()
 
 stock_db = get_stock_db()
 vector_db = get_vector_db()
@@ -469,16 +459,13 @@ def analyze_stock(ticker: str) -> dict:
             stock_db.save_technicals(ticker, tech_data)
 
         # ファンダメンタル分析
-        try:
-            fa = FundamentalAnalyzer(ticker)
-            fund_data = fa.get_analysis_summary()
-            result["fundamental"] = fund_data
-            stock_db.save_fundamentals(ticker, fund_data)
-        except:
-            pass
+        fa = FundamentalAnalyzer(ticker)
+        fund_data = fa.get_analysis_summary()
+        result["fundamental"] = fund_data
+        stock_db.save_fundamentals(ticker, fund_data)
 
         # ベクトルDBに企業情報を保存
-        if vector_db and info.get("description"):
+        if info.get("description"):
             vector_db.add_company_description(
                 ticker=ticker,
                 name=info.get("name", ""),
@@ -504,40 +491,33 @@ def search_related_info(query: str, ticker: str = None) -> dict:
     """
     ベクトルDBから関連情報をセマンティック検索
     """
-    if not vector_db:
-        return {}
+    results = {}
 
-    try:
-        results = {}
+    # 類似企業を検索
+    similar_companies = vector_db.search_companies(query, n_results=3)
+    if similar_companies:
+        results["similar_companies"] = similar_companies
 
-        # 類似企業を検索
-        similar_companies = vector_db.search_companies(query, n_results=3)
-        if similar_companies:
-            results["similar_companies"] = similar_companies
+    # 関連ニュースを検索
+    if ticker:
+        news = vector_db.search_news(query, ticker=ticker, n_results=5)
+    else:
+        news = vector_db.search_news(query, n_results=5)
+    if news:
+        results["related_news"] = news
 
-        # 関連ニュースを検索
-        if ticker:
-            news = vector_db.search_news(query, ticker=ticker, n_results=5)
-        else:
-            news = vector_db.search_news(query, n_results=5)
-        if news:
-            results["related_news"] = news
+    # リサーチノートを検索
+    research = vector_db.search_research(query, ticker=ticker, n_results=3)
+    if research:
+        results["research_notes"] = research
 
-        # リサーチノートを検索
-        research = vector_db.search_research(query, ticker=ticker, n_results=3)
-        if research:
-            results["research_notes"] = research
-
-        return results
-    except Exception as e:
-        return {}
+    return results
 
 
 def get_db_stats() -> dict:
     """DB統計を取得"""
     stats = {"stock_db": stock_db.get_stats()}
-    if vector_db:
-        stats["vector_db"] = vector_db.get_stats()
+    stats["vector_db"] = vector_db.get_stats()
     return stats
 
 
@@ -552,12 +532,8 @@ def get_realtime_news(ticker: str, company_name: str) -> dict:
     Returns:
         ニュース分析結果
     """
-    try:
-        news_analyzer = NewsAnalyzer()
-        return news_analyzer.get_realtime_stock_news(ticker, company_name)
-    except Exception as e:
-        print(f"News fetch error: {e}")
-        return None
+    news_analyzer = NewsAnalyzer()
+    return news_analyzer.get_realtime_stock_news(ticker, company_name)
 
 
 # --- メインUI ---
@@ -572,12 +548,11 @@ st.markdown("""
 # ステータス（DB接続状態を表示）
 db_stats = get_db_stats()
 stocks_in_db = db_stats.get("stock_db", {}).get("stocks_count", 0)
-vector_ready = "vector_db" in db_stats
 
 st.markdown(f"""
 <div class="status-indicator">
     <span class="status-dot"></span>
-    <span>AI Ready | DB: {stocks_in_db}銘柄{" | Vector検索可" if vector_ready else ""}</span>
+    <span>AI Ready | DB: {stocks_in_db}銘柄 | Vector検索可</span>
 </div>
 """, unsafe_allow_html=True)
 
@@ -736,24 +711,21 @@ ROE: {info.get('roe', 0) * 100 if info.get('roe') else 0:.1f}%
                     context_data += f"USD/JPY: ¥{fx.get('rate', 0):.2f}\n"
 
                 # 市場ニュースを取得
-                try:
-                    news_analyzer = NewsAnalyzer()
-                    market_sentiment = news_analyzer.get_market_sentiment()
-                    if market_sentiment:
-                        context_data += f"""
+                news_analyzer = NewsAnalyzer()
+                market_sentiment = news_analyzer.get_market_sentiment()
+                if market_sentiment:
+                    context_data += f"""
 【市場センチメント】
 市場センチメントスコア: {market_sentiment.get('market_sentiment_score', 50)}/100
 市場センチメント: {market_sentiment.get('market_sentiment', '中立')}
 サマリー: {market_sentiment.get('summary', '')}
 """
-                        top_news = market_sentiment.get('top_news', [])
-                        if top_news:
-                            context_data += "\n【本日の主要ニュース】\n"
-                            for article in top_news[:4]:
-                                sentiment_mark = "📈" if article.get('sentiment') == "ポジティブ" else "📉" if article.get('sentiment') == "ネガティブ" else "➖"
-                                context_data += f"- {sentiment_mark} {article.get('title', '')[:50]}... ({article.get('source', '')})\n"
-                except:
-                    pass
+                    top_news = market_sentiment.get('top_news', [])
+                    if top_news:
+                        context_data += "\n【本日の主要ニュース】\n"
+                        for article in top_news[:4]:
+                            sentiment_mark = "📈" if article.get('sentiment') == "ポジティブ" else "📉" if article.get('sentiment') == "ネガティブ" else "➖"
+                            context_data += f"- {sentiment_mark} {article.get('title', '')[:50]}... ({article.get('source', '')})\n"
 
             # スクリーニングが必要そうな場合
             if any(word in user_input for word in ["探して", "スクリーニング", "割安", "高配当", "成長", "おすすめ"]):

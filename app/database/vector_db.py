@@ -59,17 +59,10 @@ class VectorDatabase:
         """コレクションを初期化"""
         # BGE-M3モデルを使用（多言語対応、日本語に最適）
         # sentence-transformers経由でローカル処理
-        try:
-            self.embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
-                model_name=BGE_M3_MODEL,
-                trust_remote_code=True
-            )
-        except Exception as e:
-            # フォールバック: デフォルト埋め込み関数
-            try:
-                self.embedding_fn = embedding_functions.DefaultEmbeddingFunction()
-            except Exception:
-                self.embedding_fn = None
+        self.embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
+            model_name=BGE_M3_MODEL,
+            trust_remote_code=True
+        )
 
         # ニュース記事用コレクション
         self.news_collection = self.client.get_or_create_collection(

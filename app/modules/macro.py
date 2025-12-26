@@ -295,31 +295,25 @@ class MacroAnalyzer:
         """
         日銀関連ニュースを検索
         """
-        try:
-            with DDGS() as ddgs:
-                results = list(ddgs.text(
-                    "日銀 金融政策 site:boj.or.jp OR site:nikkei.com",
-                    region='jp-jp',
-                    max_results=5
-                ))
-            return [{"title": r["title"], "url": r["href"], "snippet": r["body"]} for r in results]
-        except:
-            return []
+        with DDGS() as ddgs:
+            results = list(ddgs.text(
+                "日銀 金融政策 site:boj.or.jp OR site:nikkei.com",
+                region='jp-jp',
+                max_results=5
+            ))
+        return [{"title": r["title"], "url": r["href"], "snippet": r["body"]} for r in results]
 
     def search_economic_news(self, topic: str = "日本経済") -> List[Dict]:
         """
         経済ニュースを検索
         """
-        try:
-            with DDGS() as ddgs:
-                results = list(ddgs.text(
-                    f"{topic} 経済指標 最新",
-                    region='jp-jp',
-                    max_results=5
-                ))
-            return [{"title": r["title"], "url": r["href"], "snippet": r["body"]} for r in results]
-        except:
-            return []
+        with DDGS() as ddgs:
+            results = list(ddgs.text(
+                f"{topic} 経済指標 最新",
+                region='jp-jp',
+                max_results=5
+            ))
+        return [{"title": r["title"], "url": r["href"], "snippet": r["body"]} for r in results]
 
     def get_macro_summary(self) -> Dict:
         """

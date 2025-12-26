@@ -81,14 +81,11 @@ class PatentResearcher:
         J-PlatPat（特許庁データベース）での検索情報を取得
         ※直接APIアクセスは制限があるため、Web検索経由
         """
-        try:
-            with DDGS() as ddgs:
-                query = f'site:j-platpat.inpit.go.jp "{company_name}"'
-                results = list(ddgs.text(query, region='jp-jp', max_results=5))
+        with DDGS() as ddgs:
+            query = f'site:j-platpat.inpit.go.jp "{company_name}"'
+            results = list(ddgs.text(query, region='jp-jp', max_results=5))
 
-            return [{"title": r["title"], "url": r["href"], "snippet": r["body"]} for r in results]
-        except:
-            return []
+        return [{"title": r["title"], "url": r["href"], "snippet": r["body"]} for r in results]
 
     def analyze_patent_portfolio(self, company_name: str) -> Dict:
         """
@@ -143,14 +140,11 @@ class PatentResearcher:
         """
         最近の特許出願を検索
         """
-        try:
-            with DDGS() as ddgs:
-                query = f'site:patents.google.com "{company_name}" {year}'
-                results = list(ddgs.text(query, region='jp-jp', max_results=10))
+        with DDGS() as ddgs:
+            query = f'site:patents.google.com "{company_name}" {year}'
+            results = list(ddgs.text(query, region='jp-jp', max_results=10))
 
-            return [{"title": r["title"], "url": r["href"], "snippet": r["body"]} for r in results]
-        except:
-            return []
+        return [{"title": r["title"], "url": r["href"], "snippet": r["body"]} for r in results]
 
     def compare_patent_strength(self, companies: List[str]) -> Dict:
         """
@@ -192,27 +186,21 @@ class PatentResearcher:
 
         keyword = industry_keywords.get(industry, f"{industry} 特許")
 
-        try:
-            with DDGS() as ddgs:
-                query = f'site:patents.google.com {keyword}'
-                results = list(ddgs.text(query, region='jp-jp', max_results=max_results))
+        with DDGS() as ddgs:
+            query = f'site:patents.google.com {keyword}'
+            results = list(ddgs.text(query, region='jp-jp', max_results=max_results))
 
-            return [{"title": r["title"], "url": r["href"], "snippet": r["body"]} for r in results]
-        except:
-            return []
+        return [{"title": r["title"], "url": r["href"], "snippet": r["body"]} for r in results]
 
     def get_patent_news(self, company_name: str) -> List[Dict]:
         """
         特許関連ニュースを検索
         """
-        try:
-            with DDGS() as ddgs:
-                query = f'{company_name} 特許 取得 OR 出願 OR 訴訟'
-                results = list(ddgs.text(query, region='jp-jp', max_results=5))
+        with DDGS() as ddgs:
+            query = f'{company_name} 特許 取得 OR 出願 OR 訴訟'
+            results = list(ddgs.text(query, region='jp-jp', max_results=5))
 
-            return [{"title": r["title"], "url": r["href"], "snippet": r["body"]} for r in results]
-        except:
-            return []
+        return [{"title": r["title"], "url": r["href"], "snippet": r["body"]} for r in results]
 
     def analyze_tech_innovation(self, ticker: str, company_name: str) -> Dict:
         """

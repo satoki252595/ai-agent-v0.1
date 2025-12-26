@@ -9,10 +9,7 @@ import os
 # --- LLM設定 (Ollama) ---
 def get_secret(key, default=""):
     """Streamlit secrets または環境変数から値を取得"""
-    try:
-        return st.secrets.get(key, os.environ.get(key, default))
-    except:
-        return os.environ.get(key, default)
+    return st.secrets.get(key, os.environ.get(key, default))
 
 OLLAMA_URL = get_secret("OLLAMA_BASE_URL", "http://localhost:11435")
 MODEL_NAME = get_secret("MODEL_NAME", "nemotron-3-nano")

@@ -347,12 +347,9 @@ class StockDatabase:
         if not updated_at:
             return False
 
-        try:
-            update_time = datetime.fromisoformat(updated_at)
-            age = datetime.now() - update_time
-            return age < timedelta(hours=max_age_hours)
-        except:
-            return False
+        update_time = datetime.fromisoformat(updated_at)
+        age = datetime.now() - update_time
+        return age < timedelta(hours=max_age_hours)
 
     def clear_all(self):
         """すべてのデータを削除（開発用）"""

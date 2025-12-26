@@ -34,20 +34,14 @@ def format_number(value: float, decimals: int = 2) -> str:
     """数値をフォーマット"""
     if value is None:
         return "N/A"
-    try:
-        return f"{value:,.{decimals}f}"
-    except:
-        return "N/A"
+    return f"{value:,.{decimals}f}"
 
 
 def format_percentage(value: float, decimals: int = 2) -> str:
     """パーセンテージ表示"""
     if value is None:
         return "N/A"
-    try:
-        return f"{value * 100:.{decimals}f}%"
-    except:
-        return "N/A"
+    return f"{value * 100:.{decimals}f}%"
 
 
 @dataclass
@@ -143,30 +137,24 @@ class FundamentalAnalyzer:
         """
         ROIC（投下資本利益率）を計算
         """
-        try:
-            nopat = self.info.get("operatingIncome", 0) * 0.7  # 税引後営業利益（簡易計算）
-            total_debt = self.info.get("totalDebt", 0)
-            total_equity = self.info.get("totalStockholderEquity", 0) or self.info.get("bookValue", 0) * self.info.get("sharesOutstanding", 1)
-            invested_capital = total_debt + total_equity
+        nopat = self.info.get("operatingIncome", 0) * 0.7  # 税引後営業利益（簡易計算）
+        total_debt = self.info.get("totalDebt", 0)
+        total_equity = self.info.get("totalStockholderEquity", 0) or self.info.get("bookValue", 0) * self.info.get("sharesOutstanding", 1)
+        invested_capital = total_debt + total_equity
 
-            if invested_capital > 0:
-                return nopat / invested_capital
-            return None
-        except:
-            return None
+        if invested_capital > 0:
+            return nopat / invested_capital
+        return None
 
     def _calculate_interest_coverage(self) -> Optional[float]:
         """
         インタレストカバレッジレシオを計算
         """
-        try:
-            ebit = self.info.get("ebitda", 0) - self.info.get("depreciation", 0)
-            interest_expense = self.info.get("interestExpense", None)
-            if interest_expense and interest_expense != 0:
-                return abs(ebit / interest_expense)
-            return None
-        except:
-            return None
+        ebit = self.info.get("ebitda", 0) - self.info.get("depreciation", 0)
+        interest_expense = self.info.get("interestExpense", None)
+        if interest_expense and interest_expense != 0:
+            return abs(ebit / interest_expense)
+        return None
 
     def get_financial_statements(self) -> Dict:
         """
@@ -473,21 +461,18 @@ class FundamentalAnalyzer:
 
         # 同業他社のデータ
         for ticker in peer_tickers:
-            try:
-                peer = yf.Ticker(format_ticker(ticker))
-                peer_info = peer.info
-                data.append({
-                    "ticker": ticker,
-                    "name": peer_info.get("shortName", ""),
-                    "market_cap": peer_info.get("marketCap", 0),
-                    "per": peer_info.get("trailingPE", None),
-                    "pbr": peer_info.get("priceToBook", None),
-                    "roe": peer_info.get("returnOnEquity", None),
-                    "dividend_yield": peer_info.get("dividendYield", None),
-                    "operating_margin": peer_info.get("operatingMargins", None)
-                })
-            except:
-                continue
+            peer = yf.Ticker(format_ticker(ticker))
+            peer_info = peer.info
+            data.append({
+                "ticker": ticker,
+                "name": peer_info.get("shortName", ""),
+                "market_cap": peer_info.get("marketCap", 0),
+                "per": peer_info.get("trailingPE", None),
+                "pbr": peer_info.get("priceToBook", None),
+                "roe": peer_info.get("returnOnEquity", None),
+                "dividend_yield": peer_info.get("dividendYield", None),
+                "operating_margin": peer_info.get("operatingMargins", None)
+            })
 
         return pd.DataFrame(data)
 

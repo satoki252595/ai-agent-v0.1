@@ -107,55 +107,49 @@ class NewsAnalyzer:
         """
         セクター・業界ニュースを検索
         """
-        try:
-            with DDGS() as ddgs:
-                results = list(ddgs.text(
-                    f"{sector} 業界 動向 OR 見通し",
-                    region='jp-jp',
-                    max_results=max_results
-                ))
+        with DDGS() as ddgs:
+            results = list(ddgs.text(
+                f"{sector} 業界 動向 OR 見通し",
+                region='jp-jp',
+                max_results=max_results
+            ))
 
-            articles = []
-            for r in results:
-                sentiment = self._analyze_sentiment(r.get("title", "") + " " + r.get("body", ""))
-                articles.append(NewsArticle(
-                    title=r.get("title", ""),
-                    url=r.get("href", ""),
-                    source=self._extract_source(r.get("href", "")),
-                    snippet=r.get("body", ""),
-                    sentiment=sentiment
-                ))
+        articles = []
+        for r in results:
+            sentiment = self._analyze_sentiment(r.get("title", "") + " " + r.get("body", ""))
+            articles.append(NewsArticle(
+                title=r.get("title", ""),
+                url=r.get("href", ""),
+                source=self._extract_source(r.get("href", "")),
+                snippet=r.get("body", ""),
+                sentiment=sentiment
+            ))
 
-            return articles
-        except:
-            return []
+        return articles
 
     def search_earnings_news(self, company_name: str) -> List[NewsArticle]:
         """
         決算関連ニュースを検索
         """
-        try:
-            with DDGS() as ddgs:
-                results = list(ddgs.text(
-                    f"{company_name} 決算 発表 OR 業績 OR 見通し",
-                    region='jp-jp',
-                    max_results=5
-                ))
+        with DDGS() as ddgs:
+            results = list(ddgs.text(
+                f"{company_name} 決算 発表 OR 業績 OR 見通し",
+                region='jp-jp',
+                max_results=5
+            ))
 
-            articles = []
-            for r in results:
-                sentiment = self._analyze_sentiment(r.get("title", "") + " " + r.get("body", ""))
-                articles.append(NewsArticle(
-                    title=r.get("title", ""),
-                    url=r.get("href", ""),
-                    source=self._extract_source(r.get("href", "")),
-                    snippet=r.get("body", ""),
-                    sentiment=sentiment
-                ))
+        articles = []
+        for r in results:
+            sentiment = self._analyze_sentiment(r.get("title", "") + " " + r.get("body", ""))
+            articles.append(NewsArticle(
+                title=r.get("title", ""),
+                url=r.get("href", ""),
+                source=self._extract_source(r.get("href", "")),
+                snippet=r.get("body", ""),
+                sentiment=sentiment
+            ))
 
-            return articles
-        except:
-            return []
+        return articles
 
     @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
     def search_ir_news(self, company_name: str, ticker: str = None, max_results: int = 10) -> List[NewsArticle]:
@@ -318,28 +312,25 @@ class NewsAnalyzer:
         """
         市場全体のニュースを検索
         """
-        try:
-            with DDGS() as ddgs:
-                results = list(ddgs.text(
-                    "日経平均 東証 株式市場 本日",
-                    region='jp-jp',
-                    max_results=max_results
-                ))
+        with DDGS() as ddgs:
+            results = list(ddgs.text(
+                "日経平均 東証 株式市場 本日",
+                region='jp-jp',
+                max_results=max_results
+            ))
 
-            articles = []
-            for r in results:
-                sentiment = self._analyze_sentiment(r.get("title", "") + " " + r.get("body", ""))
-                articles.append(NewsArticle(
-                    title=r.get("title", ""),
-                    url=r.get("href", ""),
-                    source=self._extract_source(r.get("href", "")),
-                    snippet=r.get("body", ""),
-                    sentiment=sentiment
-                ))
+        articles = []
+        for r in results:
+            sentiment = self._analyze_sentiment(r.get("title", "") + " " + r.get("body", ""))
+            articles.append(NewsArticle(
+                title=r.get("title", ""),
+                url=r.get("href", ""),
+                source=self._extract_source(r.get("href", "")),
+                snippet=r.get("body", ""),
+                sentiment=sentiment
+            ))
 
-            return articles
-        except:
-            return []
+        return articles
 
     def _analyze_sentiment(self, text: str) -> str:
         """
@@ -425,14 +416,11 @@ class NewsAnalyzer:
         """
         記事の本文を取得
         """
-        try:
-            downloaded = trafilatura.fetch_url(url)
-            if downloaded:
-                content = trafilatura.extract(downloaded, include_comments=False)
-                return content if content else ""
-            return ""
-        except:
-            return ""
+        downloaded = trafilatura.fetch_url(url)
+        if downloaded:
+            content = trafilatura.extract(downloaded, include_comments=False)
+            return content if content else ""
+        return ""
 
     def analyze_company_sentiment(self, ticker: str, company_name: str) -> Dict:
         """
@@ -519,24 +507,21 @@ class NewsAnalyzer:
         """
         アナリストレポート・レーティングを検索
         """
-        try:
-            with DDGS() as ddgs:
-                results = list(ddgs.text(
-                    f"{company_name} アナリスト レーティング OR 目標株価",
-                    region='jp-jp',
-                    max_results=5
-                ))
+        with DDGS() as ddgs:
+            results = list(ddgs.text(
+                f"{company_name} アナリスト レーティング OR 目標株価",
+                region='jp-jp',
+                max_results=5
+            ))
 
-            return [
-                {
-                    "title": r.get("title", ""),
-                    "url": r.get("href", ""),
-                    "snippet": r.get("body", "")
-                }
-                for r in results
-            ]
-        except:
-            return []
+        return [
+            {
+                "title": r.get("title", ""),
+                "url": r.get("href", ""),
+                "snippet": r.get("body", "")
+            }
+            for r in results
+        ]
 
     def get_comprehensive_news_analysis(self, ticker: str, company_name: str) -> Dict:
         """

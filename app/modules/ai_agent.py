@@ -48,16 +48,13 @@ class StockResearchAgent:
 
     def fetch_content(self, url: str) -> str:
         """URLから本文を抽出"""
-        try:
-            if url.lower().endswith('.pdf'):
-                return ""
-            downloaded = trafilatura.fetch_url(url)
-            if downloaded is None:
-                return ""
-            text = trafilatura.extract(downloaded, include_comments=False, include_tables=True)
-            return text if text else ""
-        except:
+        if url.lower().endswith('.pdf'):
             return ""
+        downloaded = trafilatura.fetch_url(url)
+        if downloaded is None:
+            return ""
+        text = trafilatura.extract(downloaded, include_comments=False, include_tables=True)
+        return text if text else ""
 
     def generate_stock_report(
         self,
