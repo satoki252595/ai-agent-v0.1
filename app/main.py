@@ -813,15 +813,20 @@ ROE: {info.get('roe', 0) * 100 if info.get('roe') else 0:.1f}%
 
             chain = prompt | agent.llm | StrOutputParser()
 
-            # コンテキストがない場合の警告
+            # コンテキストがない場合はLLMを使わず固定メッセージ
             if not has_data:
-                context_data = "【注意】この銘柄のデータを取得できませんでした。一般的な情報のみで回答します。具体的な数値は提供できません。"
+                full_response = """申し訳ございません。この銘柄のデータを取得できませんでした。
 
-            for chunk in chain.stream({
-                "context": context_data,
-                "question": user_input
-            }):
-                full_response += chunk
+**考えられる原因:**
+- 銘柄コード（4桁の数字）が入力されていない
+- 銘柄コードが正しくない
+- データソースに接続できない
+
+**ご利用方法:**
+銘柄コードを含めて質問してください。
+例: 「7203 トヨタ」「9984 ソフトバンクG」
+
+※企業名のみでの検索は現在対応していません。"""
                 response_container.markdown(f'''
                 <div class="message">
                     <div class="message-avatar avatar-ai">🤖</div>
@@ -833,6 +838,23 @@ ROE: {info.get('roe', 0) * 100 if info.get('roe') else 0:.1f}%
                     </div>
                 </div>
                 ''', unsafe_allow_html=True)
+            else:
+                for chunk in chain.stream({
+                    "context": context_data,
+                    "question": user_input
+                }):
+                    full_response += chunk
+                    response_container.markdown(f'''
+                    <div class="message">
+                        <div class="message-avatar avatar-ai">🤖</div>
+                        <div class="message-content">
+                            <div class="message-header">
+                                <span class="message-sender">AI</span>
+                            </div>
+                            <div class="message-bubble bubble-ai">{full_response}</div>
+                        </div>
+                    </div>
+                    ''', unsafe_allow_html=True)
 
             response_time = datetime.now().strftime("%H:%M")
             st.session_state.messages.append({"role": "assistant", "content": full_response, "time": response_time})
