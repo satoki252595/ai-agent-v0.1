@@ -405,6 +405,53 @@ def extract_ticker(text: str) -> str:
     return None
 
 
+def search_company_by_name(company_name: str) -> list:
+    """
+    企業名から銘柄候補を検索
+
+    Returns:
+        [(ticker, name), ...] 形式の候補リスト
+    """
+    stock_db = get_stock_db()
+    matches = stock_db.search_by_name(company_name, limit=5)
+
+    if matches:
+        return [(m.get("ticker"), m.get("name", "")) for m in matches]
+
+    # DBに無い場合、yfinanceで直接検索を試行
+    # 日本株の主要なサフィックス
+    import yfinance as yf
+    search_term = company_name.replace(" ", "")
+
+    # 東証検索用のパターン
+    candidates = []
+    # 一般的な東証ティッカーパターンを試行（数字4桁.T）
+    # ここではyfinanceのsearchを使用
+    try:
+        # yfinanceには直接の検索APIがないため、
+        # 代替としてDuckDuckGoでティッカーを検索
+        from duckduckgo_search import DDGS
+        with DDGS() as ddgs:
+            results = list(ddgs.text(
+                f"{company_name} 証券コード 銘柄コード site:yahoo.co.jp OR site:nikkei.com",
+                region='jp-jp',
+                max_results=3
+            ))
+        # 結果から4桁の数字を抽出
+        for r in results:
+            snippet = r.get("body", "") + r.get("title", "")
+            ticker_match = re.search(r'\b(\d{4})\b', snippet)
+            if ticker_match:
+                found_ticker = ticker_match.group(1)
+                # 重複チェック
+                if not any(c[0] == found_ticker for c in candidates):
+                    candidates.append((found_ticker, company_name))
+    except Exception:
+        pass
+
+    return candidates[:5]
+
+
 def analyze_stock(ticker: str) -> dict:
     """
     銘柄を分析してデータを取得
@@ -635,6 +682,26 @@ with col2:
     send_button = st.button("送信", type="primary", use_container_width=True, key="send_btn")
 
 
+# 銘柄選択セッション状態
+if "pending_candidates" not in st.session_state:
+    st.session_state.pending_candidates = []
+
+# 候補選択ボタンの処理
+if st.session_state.pending_candidates:
+    st.markdown("**該当する銘柄を選択してください：**")
+    cols = st.columns(len(st.session_state.pending_candidates))
+    for i, (ticker, name) in enumerate(st.session_state.pending_candidates):
+        with cols[i]:
+            if st.button(f"{ticker}\n{name[:10]}", key=f"cand_{ticker}", use_container_width=True):
+                # 選択された銘柄でメッセージを追加
+                st.session_state.messages.append({
+                    "role": "user",
+                    "content": f"{ticker} {name}",
+                    "time": datetime.now().strftime("%H:%M")
+                })
+                st.session_state.pending_candidates = []
+                st.rerun()
+
 # 送信処理
 if send_button and user_input and not st.session_state.processing:
     st.session_state.processing = True
@@ -650,6 +717,34 @@ if send_button and user_input and not st.session_state.processing:
 
             # 銘柄コードの抽出
             ticker = extract_ticker(user_input)
+
+            # 銘柄コードがない場合、企業名で検索
+            if not ticker:
+                # 企業名らしきキーワードを抽出（日本語のみ or 英数字含む単語）
+                company_keywords = re.findall(r'[ァ-ヶー一-龯a-zA-Z]+', user_input)
+                if company_keywords:
+                    search_term = max(company_keywords, key=len)  # 最長のキーワード
+                    candidates = search_company_by_name(search_term)
+
+                    if len(candidates) == 1:
+                        # 1件のみ → そのまま使用
+                        ticker = candidates[0][0]
+                    elif len(candidates) > 1:
+                        # 複数候補 → ユーザーに選択を求める
+                        response_time = datetime.now().strftime("%H:%M")
+                        candidate_msg = f"「{search_term}」に該当する銘柄が複数見つかりました。\n\n"
+                        for t, n in candidates:
+                            candidate_msg += f"• **{t}** - {n}\n"
+                        candidate_msg += "\n銘柄コードを含めて再度質問してください。\n例: 「{} について分析して」".format(candidates[0][0])
+
+                        st.session_state.messages.append({
+                            "role": "assistant",
+                            "content": candidate_msg,
+                            "time": response_time
+                        })
+                        st.session_state.pending_candidates = candidates[:4]
+                        st.session_state.processing = False
+                        st.rerun()
 
             # コンテキストの構築
             context_data = ""

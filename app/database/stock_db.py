@@ -125,6 +125,30 @@ class StockDatabase:
 
         return self.stocks.search(query)
 
+    def search_by_name(self, company_name: str, limit: int = 10) -> List[Dict]:
+        """
+        企業名で銘柄を検索（部分一致）
+
+        Args:
+            company_name: 検索する企業名（部分一致）
+            limit: 最大結果数
+
+        Returns:
+            マッチする銘柄リスト
+        """
+        all_stocks = self.stocks.all()
+        matches = []
+
+        search_term = company_name.lower()
+        for stock in all_stocks:
+            name = stock.get("name", "").lower()
+            if search_term in name or name in search_term:
+                matches.append(stock)
+                if len(matches) >= limit:
+                    break
+
+        return matches
+
     def delete_stock(self, ticker: str) -> bool:
         """銘柄を削除"""
         Stock = Query()
