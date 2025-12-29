@@ -9,6 +9,7 @@ import streamlit as st
 import sys
 import os
 import re
+from datetime import datetime
 
 # モジュールパスを追加
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -16,74 +17,359 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # --- ページ設定 ---
 st.set_page_config(
     page_title="日本株AI",
-    page_icon="🤖",
+    page_icon="📈",
     layout="centered",
     initial_sidebar_state="collapsed"
 )
 
-# --- シンプルCSS ---
+# --- モダンUI CSS ---
 st.markdown("""
 <style>
+    /* カラーパレット */
     :root {
         --primary: #6366f1;
-        --bg-dark: #0f0f0f;
-        --bg-card: #1a1a1a;
-        --bg-input: #252525;
-        --text-primary: #ffffff;
+        --primary-hover: #4f46e5;
+        --accent: #22c55e;
+        --danger: #ef4444;
+        --warning: #f59e0b;
+        --bg-primary: #09090b;
+        --bg-secondary: #18181b;
+        --bg-tertiary: #27272a;
+        --bg-input: #1f1f23;
+        --text-primary: #fafafa;
         --text-secondary: #a1a1aa;
-        --border: #2a2a2a;
+        --text-muted: #71717a;
+        --border: #3f3f46;
+        --border-light: #52525b;
     }
 
+    /* ベース */
     .stApp {
-        background: var(--bg-dark) !important;
-        color: var(--text-primary) !important;
+        background: var(--bg-primary) !important;
     }
 
-    [data-testid="stSidebar"] { display: none; }
-    [data-testid="stHeader"] { background: transparent !important; }
-    footer { display: none !important; }
+    [data-testid="stSidebar"],
+    [data-testid="stHeader"],
+    footer,
+    #MainMenu {
+        display: none !important;
+    }
 
     .main .block-container {
-        padding: 1rem !important;
-        max-width: 800px !important;
+        padding: 0 !important;
+        max-width: 100% !important;
     }
 
-    .app-title {
+    /* ヘッダー */
+    .app-header {
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        background: linear-gradient(180deg, var(--bg-primary) 0%, var(--bg-primary) 80%, transparent 100%);
+        padding: 1rem 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .app-logo {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .app-logo-icon {
+        font-size: 1.5rem;
+    }
+
+    .app-logo-text {
+        font-size: 1.125rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, var(--primary) 0%, #a855f7 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+
+    .header-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .header-btn {
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border);
+        border-radius: 0.5rem;
+        padding: 0.5rem 0.75rem;
+        color: var(--text-secondary);
+        font-size: 0.8rem;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .header-btn:hover {
+        background: var(--bg-input);
+        color: var(--text-primary);
+        border-color: var(--border-light);
+    }
+
+    /* チャットエリア */
+    .chat-container {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 1rem 1rem 140px 1rem;
+        min-height: calc(100vh - 160px);
+    }
+
+    /* メッセージ */
+    .message {
+        display: flex;
+        gap: 0.75rem;
+        margin-bottom: 1.25rem;
+        animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .message-avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 0.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.875rem;
+        flex-shrink: 0;
+    }
+
+    .avatar-user {
+        background: linear-gradient(135deg, var(--primary) 0%, #4f46e5 100%);
+    }
+
+    .avatar-ai {
+        background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    }
+
+    .message-content {
+        flex: 1;
+        max-width: calc(100% - 44px);
+    }
+
+    .message-header {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.25rem;
+    }
+
+    .message-sender {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .message-time {
+        font-size: 0.7rem;
+        color: var(--text-muted);
+    }
+
+    .message-bubble {
+        padding: 0.875rem 1rem;
+        border-radius: 0 0.75rem 0.75rem 0.75rem;
+        line-height: 1.6;
+        font-size: 0.9375rem;
+    }
+
+    .bubble-user {
+        background: linear-gradient(135deg, var(--primary) 0%, #4f46e5 100%);
+        color: white;
+        border-radius: 0.75rem 0.75rem 0 0.75rem;
+    }
+
+    .bubble-ai {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        color: var(--text-primary);
+    }
+
+    .bubble-ai p { margin: 0 0 0.5rem 0; }
+    .bubble-ai p:last-child { margin-bottom: 0; }
+    .bubble-ai ul, .bubble-ai ol { margin: 0.5rem 0; padding-left: 1.25rem; }
+    .bubble-ai li { margin: 0.25rem 0; color: var(--text-secondary); }
+    .bubble-ai strong { color: var(--text-primary); }
+    .bubble-ai code { background: var(--bg-tertiary); padding: 0.125rem 0.375rem; border-radius: 0.25rem; font-size: 0.875rem; }
+
+    /* ウェルカム画面 */
+    .welcome {
         text-align: center;
+        padding: 3rem 1.5rem;
+    }
+
+    .welcome-icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+    }
+
+    .welcome-title {
         font-size: 1.5rem;
         font-weight: 700;
-        padding: 1rem 0;
-        color: var(--primary);
+        color: var(--text-primary);
+        margin-bottom: 0.5rem;
     }
 
-    .message {
-        padding: 1rem;
-        border-radius: 0.75rem;
-        margin-bottom: 0.75rem;
+    .welcome-subtitle {
+        color: var(--text-secondary);
+        font-size: 0.9375rem;
+        margin-bottom: 2rem;
     }
 
-    .message-user {
-        background: var(--primary);
-        color: white;
+    .quick-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        justify-content: center;
+        max-width: 500px;
+        margin: 0 auto;
     }
 
-    .message-ai {
-        background: var(--bg-card);
+    .quick-action {
+        background: var(--bg-secondary);
         border: 1px solid var(--border);
+        border-radius: 2rem;
+        padding: 0.5rem 1rem;
+        color: var(--text-secondary);
+        font-size: 0.8125rem;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .quick-action:hover {
+        border-color: var(--primary);
+        color: var(--primary);
+        background: rgba(99, 102, 241, 0.1);
+    }
+
+    /* 入力エリア */
+    .input-container {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: linear-gradient(0deg, var(--bg-primary) 0%, var(--bg-primary) 85%, transparent 100%);
+        padding: 1rem;
+        z-index: 100;
+    }
+
+    .input-wrapper {
+        max-width: 800px;
+        margin: 0 auto;
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        border-radius: 1rem;
+        padding: 0.75rem;
+        display: flex;
+        gap: 0.75rem;
+        align-items: flex-end;
+    }
+
+    .input-wrapper:focus-within {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
     }
 
     .stTextArea textarea {
-        background: var(--bg-input) !important;
-        border: 1px solid var(--border) !important;
-        border-radius: 0.5rem !important;
+        background: transparent !important;
+        border: none !important;
         color: var(--text-primary) !important;
+        font-size: 0.9375rem !important;
+        line-height: 1.5 !important;
+        padding: 0.25rem 0 !important;
+        min-height: 24px !important;
+        max-height: 150px !important;
+        resize: none !important;
     }
+
+    .stTextArea textarea::placeholder {
+        color: var(--text-muted) !important;
+    }
+
+    .stTextArea > div > div { background: transparent !important; }
+    .stTextArea label { display: none !important; }
 
     .stButton > button {
         background: var(--primary) !important;
         color: white !important;
         border: none !important;
+        border-radius: 0.625rem !important;
+        padding: 0.625rem 1.25rem !important;
+        font-weight: 600 !important;
+        font-size: 0.875rem !important;
+        transition: all 0.2s !important;
+        min-height: 40px !important;
+    }
+
+    .stButton > button:hover {
+        background: var(--primary-hover) !important;
+        transform: translateY(-1px);
+    }
+
+    .stButton > button:active {
+        transform: translateY(0);
+    }
+
+    /* タイピングインジケーター */
+    .typing-indicator {
+        display: flex;
+        gap: 4px;
+        padding: 0.75rem 1rem;
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        border-radius: 0 0.75rem 0.75rem 0.75rem;
+        width: fit-content;
+    }
+
+    .typing-dot {
+        width: 8px;
+        height: 8px;
+        background: var(--text-muted);
+        border-radius: 50%;
+        animation: typing 1.4s infinite ease-in-out;
+    }
+
+    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes typing {
+        0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+        30% { transform: translateY(-4px); opacity: 1; }
+    }
+
+    /* スピナー */
+    .stSpinner > div {
+        border-top-color: var(--primary) !important;
+    }
+
+    /* Expander */
+    .streamlit-expanderHeader {
+        background: var(--bg-tertiary) !important;
         border-radius: 0.5rem !important;
+        font-size: 0.8rem !important;
+        color: var(--text-secondary) !important;
+    }
+
+    /* モバイル対応 */
+    @media (max-width: 640px) {
+        .app-header { padding: 0.75rem 1rem; }
+        .app-logo-text { font-size: 1rem; }
+        .chat-container { padding: 0.75rem 0.75rem 130px 0.75rem; }
+        .message-bubble { padding: 0.75rem; font-size: 0.875rem; }
+        .welcome { padding: 2rem 1rem; }
+        .welcome-title { font-size: 1.25rem; }
+        .input-wrapper { padding: 0.5rem; }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -264,34 +550,96 @@ def get_realtime_news(ticker: str, company_name: str) -> dict:
 
 
 # --- メインUI ---
-# サービス名
-st.markdown('<div class="app-title">日本株リサーチAI</div>', unsafe_allow_html=True)
+
+# ヘッダー
+col_logo, col_actions = st.columns([3, 1])
+with col_logo:
+    st.markdown('''
+    <div class="app-logo">
+        <span class="app-logo-icon">📈</span>
+        <span class="app-logo-text">日本株リサーチAI</span>
+    </div>
+    ''', unsafe_allow_html=True)
+with col_actions:
+    if st.button("🗑️ クリア", key="clear_btn"):
+        st.session_state.messages = []
+        st.rerun()
+
+st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+
+# ウェルカム画面（メッセージがない場合）
+if not st.session_state.messages:
+    st.markdown('''
+    <div class="welcome">
+        <div class="welcome-icon">📊</div>
+        <div class="welcome-title">日本株リサーチAIへようこそ</div>
+        <div class="welcome-subtitle">銘柄コードや企業名を入力して分析を開始</div>
+    </div>
+    ''', unsafe_allow_html=True)
+
+    # クイックアクション
+    quick_cols = st.columns(4)
+    quick_queries = ["7203 トヨタ", "市場環境", "高配当株", "9984 ソフトバンク"]
+    for i, query in enumerate(quick_queries):
+        with quick_cols[i]:
+            if st.button(query, key=f"quick_{i}", use_container_width=True):
+                st.session_state.messages.append({"role": "user", "content": query})
+                st.rerun()
 
 # チャット履歴の表示
 for msg in st.session_state.messages:
+    timestamp = msg.get("time", "")
     if msg["role"] == "user":
-        st.markdown(f'<div class="message message-user">{msg["content"]}</div>', unsafe_allow_html=True)
+        st.markdown(f'''
+        <div class="message">
+            <div class="message-avatar avatar-user">👤</div>
+            <div class="message-content">
+                <div class="message-header">
+                    <span class="message-sender">あなた</span>
+                    <span class="message-time">{timestamp}</span>
+                </div>
+                <div class="message-bubble bubble-user">{msg["content"]}</div>
+            </div>
+        </div>
+        ''', unsafe_allow_html=True)
     else:
-        st.markdown(f'<div class="message message-ai">{msg["content"]}</div>', unsafe_allow_html=True)
+        st.markdown(f'''
+        <div class="message">
+            <div class="message-avatar avatar-ai">🤖</div>
+            <div class="message-content">
+                <div class="message-header">
+                    <span class="message-sender">AI</span>
+                    <span class="message-time">{timestamp}</span>
+                </div>
+                <div class="message-bubble bubble-ai">{msg["content"]}</div>
+            </div>
+        </div>
+        ''', unsafe_allow_html=True)
+
+st.markdown('</div>', unsafe_allow_html=True)
+
+# 入力エリア用スペーサー
+st.markdown('<div style="height: 80px;"></div>', unsafe_allow_html=True)
 
 # 入力フォーム
-col1, col2 = st.columns([5, 1])
+col1, col2 = st.columns([6, 1])
 with col1:
     user_input = st.text_area(
         "質問",
-        placeholder="質問を入力...",
-        height=68,
+        placeholder="銘柄コード（例: 7203）や質問を入力...",
+        height=50,
         label_visibility="collapsed",
         key="user_input"
     )
 with col2:
-    send_button = st.button("送信", type="primary", use_container_width=True)
+    send_button = st.button("送信", type="primary", use_container_width=True, key="send_btn")
 
 
 # 送信処理
 if send_button and user_input and not st.session_state.processing:
     st.session_state.processing = True
-    st.session_state.messages.append({"role": "user", "content": user_input})
+    current_time = datetime.now().strftime("%H:%M")
+    st.session_state.messages.append({"role": "user", "content": user_input, "time": current_time})
 
     with st.spinner("分析中..."):
         try:
@@ -474,13 +822,25 @@ ROE: {info.get('roe', 0) * 100 if info.get('roe') else 0:.1f}%
                 "question": user_input
             }):
                 full_response += chunk
-                response_container.markdown(f'<div class="message message-ai">{full_response}</div>', unsafe_allow_html=True)
+                response_container.markdown(f'''
+                <div class="message">
+                    <div class="message-avatar avatar-ai">🤖</div>
+                    <div class="message-content">
+                        <div class="message-header">
+                            <span class="message-sender">AI</span>
+                        </div>
+                        <div class="message-bubble bubble-ai">{full_response}</div>
+                    </div>
+                </div>
+                ''', unsafe_allow_html=True)
 
-            st.session_state.messages.append({"role": "assistant", "content": full_response})
+            response_time = datetime.now().strftime("%H:%M")
+            st.session_state.messages.append({"role": "assistant", "content": full_response, "time": response_time})
 
         except Exception as e:
+            error_time = datetime.now().strftime("%H:%M")
             error_msg = f"エラーが発生しました: {str(e)}"
-            st.session_state.messages.append({"role": "assistant", "content": error_msg})
+            st.session_state.messages.append({"role": "assistant", "content": error_msg, "time": error_time})
 
     st.session_state.processing = False
     st.rerun()
